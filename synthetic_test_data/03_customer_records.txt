@@ -1,0 +1,13 @@
+SYNTHETIC TEST DATA - NOT REAL
+CONFIDENTIAL CUSTOMER RECORDS
+Customer: Test Customer One
+Email: customer.one@example.test
+Phone: +95 9 555 0201
+Passport: MA1234567
+Bank account: 1234-5678-9012
+
+Customer: Test Customer Two
+Email: customer.two@example.test
+Phone: +95 9 555 0202
+Passport: MB7654321
+Bank account: 9876-5432-1098

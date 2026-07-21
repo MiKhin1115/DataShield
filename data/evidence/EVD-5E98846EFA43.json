@@ -1,0 +1,57 @@
+{
+  "evidence_id": "EVD-5E98846EFA43",
+  "incident_id": "INC-6B52F81A072E",
+  "collected_at": "2026-07-20T16:44:26.774985+00:00",
+  "retained_until": "2026-10-18T16:44:26.774985+00:00",
+  "file_name": "05_financial_report.txt",
+  "file_path": "D:\\05_financial_report.txt",
+  "file_size": 148,
+  "file_type": ".txt",
+  "file_hashes": {
+    "sha256": "b47f039729cc428e69d428d19051eac164b752d32ef33c3138d898bf1eb15a2a",
+    "sha1": "2108424093e054ba7953eb1e9c4c1bb115f60fcb",
+    "md5": "f99e571704dd46fb132affe12cc90d5c"
+  },
+  "usb_serial_number": "4B875E91",
+  "usb_manufacturer": "(Standard disk drives)",
+  "usb_device_name": "Removable Disk D:",
+  "username": "M S I",
+  "computer_name": "DESKTOP-VKJ595B",
+  "ip_addresses": [
+    "172.23.160.1",
+    "192.168.100.16",
+    "fe80::4cd0:1d21:96cb:9b0",
+    "fe80::ade7:6caa:7ff6:57b1"
+  ],
+  "event_time": "2026-07-20T16:44:26.755201+00:00",
+  "sensitive_findings": [
+    {
+      "kind": "confidential_keyword",
+      "match": "CONF...TIAL",
+      "position": 32,
+      "severity": "medium"
+    },
+    {
+      "kind": "salary_or_payroll",
+      "match": "comp...tion",
+      "position": 73,
+      "severity": "high"
+    },
+    {
+      "kind": "phone_number",
+      "match": "1250...0000",
+      "position": 95,
+      "severity": "medium"
+    }
+  ],
+  "matched_policies": [
+    "txt on filename"
+  ],
+  "action_taken": "Block",
+  "encryption": "Windows DPAPI current-user",
+  "protected_copy_preserved": true,
+  "protected_copy_error": null,
+  "protected_copy_name": "EVD-5E98846EFA43.dpapi",
+  "protected_copy_sha256": "35704a16b0e90a764ccb6fd4e4e6e2821ecb032ca03250a2c854e9fa24cad622",
+  "manifest_sha256": "85ac1ee59c0b1bbf71aee9411a131bb2b1cd6a81fd5b8c6759f1660c7eb560b6"
+}

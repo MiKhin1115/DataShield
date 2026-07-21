@@ -1,0 +1,57 @@
+[
+  {
+    "user_id": "USR-6407DE3EC4",
+    "username": "admin",
+    "role": "Administrator",
+    "department": "Administration",
+    "enabled": true,
+    "password_salt": "392004bdd2bbba68948a9d2ed3e9c8cb",
+    "password_hash": "f44da7e57dc1db8684f8cbc42ddcfaf911bf1d1a75d36289e2606bf329b5059b",
+    "created_at": "2026-07-20T12:40:54.462007+00:00",
+    "updated_at": "2026-07-20T12:40:54.462007+00:00"
+  },
+  {
+    "user_id": "USR-A5ED14B1D6",
+    "username": "soc",
+    "role": "SOC Analyst",
+    "department": "Security Operations",
+    "enabled": true,
+    "password_salt": "234eaa2356ac94efa66c722dc5856750",
+    "password_hash": "3e40c2b4d98ec33ccae8b5ac0a279edfefe3b1f0f5332eda99c24a1afdd96bd3",
+    "created_at": "2026-07-20T12:40:54.583057+00:00",
+    "updated_at": "2026-07-20T16:43:48.843929+00:00"
+  },
+  {
+    "user_id": "USR-7182608593",
+    "username": "auditor",
+    "role": "Auditor",
+    "department": "Compliance",
+    "enabled": true,
+    "password_salt": "18648472121962d4646ba22a46feb935",
+    "password_hash": "368193b4e783c6ca5eeea62dc74fb14735f2367c94b2a1ff6548e5b99452a365",
+    "created_at": "2026-07-20T12:40:54.703067+00:00",
+    "updated_at": "2026-07-20T12:40:54.703067+00:00"
+  },
+  {
+    "user_id": "USR-D49E4B4987",
+    "username": "viewer",
+    "role": "Read-Only User",
+    "department": "General",
+    "enabled": true,
+    "password_salt": "955bfcaf80ab253b3ac8418253d95530",
+    "password_hash": "cf1912fb0d92b5d3d360f5f5f3cae1313b18111c59606bc5d1d0df7bf090ff24",
+    "created_at": "2026-07-20T12:40:54.822875+00:00",
+    "updated_at": "2026-07-20T12:40:54.822875+00:00"
+  },
+  {
+    "user_id": "USR-019C71A94E",
+    "username": "testing",
+    "role": "SOC Analyst",
+    "department": "testing",
+    "enabled": false,
+    "password_salt": "f1e52e2840b9e8e5bce10d19157460c3",
+    "password_hash": "982b48f734c8f73365367aec8b6aed3f611c3869d5e75fdf69570cad6c7913f8",
+    "created_at": "2026-07-20T16:08:45.285943+00:00",
+    "updated_at": "2026-07-20T16:47:35.057416+00:00"
+  }
+]

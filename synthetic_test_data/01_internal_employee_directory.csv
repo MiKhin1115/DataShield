@@ -1,0 +1,5 @@
+SYNTHETIC TEST DATA - NOT REAL
+employee_id,name,department,email,phone
+EMP-1001,Aye Chan,Engineering,aye.chan@example.test,+95 9 555 0101
+EMP-1002,Mya Win,Finance,mya.win@example.test,+95 9 555 0102
+EMP-1003,Lin Htet,Operations,lin.htet@example.test,+95 9 555 0103

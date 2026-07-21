@@ -1,0 +1,81 @@
+{
+  "evidence_id": "EVD-5CF8B4A831E2",
+  "incident_id": "INC-B89F6D9635EE",
+  "collected_at": "2026-07-20T17:07:26.049375+00:00",
+  "retained_until": "2026-10-18T17:07:26.049375+00:00",
+  "file_name": "04_restricted_credentials.env",
+  "file_path": "D:\\04_restricted_credentials.env",
+  "file_size": 202,
+  "file_type": ".env",
+  "file_hashes": {
+    "sha256": "71c69ee7fabf26e517313be2350f74033a3b72c7ce424139bdcd334ef702aaf1",
+    "sha1": "a26bbcb76c9cd70cc7c8d12e33f211be431b86a0",
+    "md5": "39887cd5129f79873b57aa581252fae7"
+  },
+  "usb_serial_number": "4B875E91",
+  "usb_manufacturer": "(Standard disk drives)",
+  "usb_device_name": "Removable Disk D:",
+  "username": "M S I",
+  "computer_name": "DESKTOP-VKJ595B",
+  "ip_addresses": [
+    "172.23.160.1",
+    "192.168.100.16",
+    "fe80::4cd0:1d21:96cb:9b0",
+    "fe80::ade7:6caa:7ff6:57b1"
+  ],
+  "event_time": "2026-07-20T17:07:26.024735+00:00",
+  "sensitive_findings": [
+    {
+      "kind": "confidential_keyword",
+      "match": "REST...CTED",
+      "position": 54,
+      "severity": "medium"
+    },
+    {
+      "kind": "confidential_keyword",
+      "match": "INTE...ONLY",
+      "position": 67,
+      "severity": "medium"
+    },
+    {
+      "kind": "password",
+      "match": "pass...3456",
+      "position": 86,
+      "severity": "critical"
+    },
+    {
+      "kind": "api_key",
+      "match": "api_...cdef",
+      "position": 115,
+      "severity": "critical"
+    },
+    {
+      "kind": "phone_number",
+      "match": "1234...7890",
+      "position": 137,
+      "severity": "medium"
+    },
+    {
+      "kind": "api_key",
+      "match": "acce...7890",
+      "position": 155,
+      "severity": "critical"
+    },
+    {
+      "kind": "phone_number",
+      "match": "1234...7890",
+      "position": 190,
+      "severity": "medium"
+    }
+  ],
+  "matched_policies": [
+    "Block restricted files"
+  ],
+  "action_taken": "Block",
+  "encryption": "Windows DPAPI current-user",
+  "protected_copy_preserved": true,
+  "protected_copy_error": null,
+  "protected_copy_name": "EVD-5CF8B4A831E2.dpapi",
+  "protected_copy_sha256": "aa57aa4f42acae0f58b8ace21b53a6181bf95188c228e64aca26eb0d8e5782ad",
+  "manifest_sha256": "232ad66b793f3c2a916e78e48e435414406d6a9737e9e63153771ffef5d16151"
+}

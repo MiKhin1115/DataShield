@@ -1,0 +1,81 @@
+{
+  "evidence_id": "EVD-0FDC5097C2E5",
+  "incident_id": "INC-1EB92C8F013F",
+  "collected_at": "2026-07-20T14:14:52.167856+00:00",
+  "retained_until": "2026-10-18T14:14:52.167856+00:00",
+  "file_name": "04_restricted_credentials_retry.env",
+  "file_path": "D:\\04_restricted_credentials_retry.env",
+  "file_size": 202,
+  "file_type": ".env",
+  "file_hashes": {
+    "sha256": "71c69ee7fabf26e517313be2350f74033a3b72c7ce424139bdcd334ef702aaf1",
+    "sha1": "a26bbcb76c9cd70cc7c8d12e33f211be431b86a0",
+    "md5": "39887cd5129f79873b57aa581252fae7"
+  },
+  "usb_serial_number": "4B875E91",
+  "usb_manufacturer": "(Standard disk drives)",
+  "usb_device_name": "Removable Disk D:",
+  "username": "M S I",
+  "computer_name": "DESKTOP-VKJ595B",
+  "ip_addresses": [
+    "172.23.160.1",
+    "192.168.100.16",
+    "fe80::4cd0:1d21:96cb:9b0",
+    "fe80::ade7:6caa:7ff6:57b1"
+  ],
+  "event_time": "2026-07-20T14:14:52.118657+00:00",
+  "sensitive_findings": [
+    {
+      "kind": "confidential_keyword",
+      "match": "REST...CTED",
+      "position": 54,
+      "severity": "medium"
+    },
+    {
+      "kind": "confidential_keyword",
+      "match": "INTE...ONLY",
+      "position": 67,
+      "severity": "medium"
+    },
+    {
+      "kind": "password",
+      "match": "pass...3456",
+      "position": 86,
+      "severity": "critical"
+    },
+    {
+      "kind": "api_key",
+      "match": "api_...cdef",
+      "position": 115,
+      "severity": "critical"
+    },
+    {
+      "kind": "phone_number",
+      "match": "1234...7890",
+      "position": 137,
+      "severity": "medium"
+    },
+    {
+      "kind": "api_key",
+      "match": "acce...7890",
+      "position": 155,
+      "severity": "critical"
+    },
+    {
+      "kind": "phone_number",
+      "match": "1234...7890",
+      "position": 190,
+      "severity": "medium"
+    }
+  ],
+  "matched_policies": [
+    "Block restricted files"
+  ],
+  "action_taken": "Block",
+  "encryption": "Windows DPAPI current-user",
+  "protected_copy_preserved": true,
+  "protected_copy_error": null,
+  "protected_copy_name": "EVD-0FDC5097C2E5.dpapi",
+  "protected_copy_sha256": "892384fe4b7ad67d7a365b0e36d48f17ff19e5c63a2f3aac97eb7a06184b7e3c",
+  "manifest_sha256": "ad158ac9c3b38a057b6621ba6f20402d14e199a3444fecedbd591f0a7685efab"
+}

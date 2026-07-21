@@ -1,0 +1,81 @@
+{
+  "evidence_id": "EVD-54054D2A000A",
+  "incident_id": "INC-347C032B3DCB",
+  "collected_at": "2026-07-20T13:44:00.112768+00:00",
+  "retained_until": "2026-10-18T13:44:00.112768+00:00",
+  "file_name": "04_restricted_credentials.env",
+  "file_path": "C:\\Users\\M S I\\Desktop\\usb-operation-demo\\synthetic_test_data\\04_restricted_credentials.env",
+  "file_size": 202,
+  "file_type": ".env",
+  "file_hashes": {
+    "sha256": "71c69ee7fabf26e517313be2350f74033a3b72c7ce424139bdcd334ef702aaf1",
+    "sha1": "a26bbcb76c9cd70cc7c8d12e33f211be431b86a0",
+    "md5": "39887cd5129f79873b57aa581252fae7"
+  },
+  "usb_serial_number": "",
+  "usb_manufacturer": "",
+  "usb_device_name": "Synthetic Test USB",
+  "username": "M S I",
+  "computer_name": "DESKTOP-VKJ595B",
+  "ip_addresses": [
+    "172.23.160.1",
+    "192.168.100.16",
+    "fe80::4cd0:1d21:96cb:9b0",
+    "fe80::ade7:6caa:7ff6:57b1"
+  ],
+  "event_time": "2026-07-20T13:44:00.091787+00:00",
+  "sensitive_findings": [
+    {
+      "kind": "confidential_keyword",
+      "match": "REST...CTED",
+      "position": 54,
+      "severity": "medium"
+    },
+    {
+      "kind": "confidential_keyword",
+      "match": "INTE...ONLY",
+      "position": 67,
+      "severity": "medium"
+    },
+    {
+      "kind": "password",
+      "match": "pass...3456",
+      "position": 86,
+      "severity": "critical"
+    },
+    {
+      "kind": "api_key",
+      "match": "api_...cdef",
+      "position": 115,
+      "severity": "critical"
+    },
+    {
+      "kind": "phone_number",
+      "match": "1234...7890",
+      "position": 137,
+      "severity": "medium"
+    },
+    {
+      "kind": "api_key",
+      "match": "acce...7890",
+      "position": 155,
+      "severity": "critical"
+    },
+    {
+      "kind": "phone_number",
+      "match": "1234...7890",
+      "position": 190,
+      "severity": "medium"
+    }
+  ],
+  "matched_policies": [
+    "Block restricted files"
+  ],
+  "action_taken": "Block",
+  "encryption": "Windows DPAPI current-user",
+  "protected_copy_preserved": true,
+  "protected_copy_error": null,
+  "protected_copy_name": "EVD-54054D2A000A.dpapi",
+  "protected_copy_sha256": "659ca1810f5df94373897a352475631aca8b35a8d0d2ea18d3e4b6c91c8c59b1",
+  "manifest_sha256": "3ab264bb1ef75a926f518c265ff6670ea01a5c47c160fda3a0ea02b7f36db533"
+}

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>USB DLP Control Center</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <section id="login-view" class="login-view">
+    <form id="login-form" class="login-panel">
+      <div class="brand-block login-brand"><div class="brand-mark">DLP</div><div><h1>USB DLP Control Center</h1><p>Secure sign in</p></div></div>
+      <label><span>Username</span><input id="login-username" name="username" autocomplete="username" required autofocus></label>
+      <label><span>Password</span><input id="login-password" name="password" type="password" autocomplete="current-password" required></label>
+      <p id="login-error" class="form-error" hidden></p>
+      <button class="button button-primary" type="submit">Sign in</button>
+    </form>
+  </section>
+
+  <div id="app-shell" class="app-shell" hidden>
+    <aside class="sidebar">
+      <div class="brand-block sidebar-brand"><div class="brand-mark">DLP</div><div><h1>USB DLP</h1><p>Control Center</p></div></div>
+      <nav id="workspace-nav" class="workspace-nav" aria-label="Platform sections">
+        <button data-view="overview" class="nav-button active" type="button"><span class="nav-glyph">01</span><span>Overview</span></button>
+        <button data-view="incidents" class="nav-button" type="button"><span class="nav-glyph">02</span><span>Incidents</span></button>
+        <button data-view="policies" data-permission="policies.view" class="nav-button" type="button"><span class="nav-glyph">03</span><span>Policies</span></button>
+        <button data-view="access" data-permission="users.manage" class="nav-button" type="button"><span class="nav-glyph">04</span><span>Access control</span></button>
+        <button data-view="audit" data-permission="audit.view" class="nav-button" type="button"><span class="nav-glyph">05</span><span>Audit log</span></button>
+      </nav>
+      <div class="sidebar-footer"><span class="live-status"><span class="status-dot"></span><span><strong>Monitoring active</strong><small>USB agent connected</small></span></span></div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <div class="brand-block mobile-brand"><div class="brand-mark">DLP</div><div><h1>USB DLP</h1><p>Control Center</p></div></div>
+        <div class="topbar-context"><span class="context-label">Security operations</span><strong>Data protection workspace</strong></div>
+        <div class="status-row">
+          <span id="current-role" class="role-label"></span>
+          <span class="user-identity"><span id="current-user"></span><small>Signed in</small></span>
+          <button id="logout-button" class="button button-secondary" type="button">Sign out</button>
+        </div>
+      </header>
+
+      <main>
+      <section id="view-overview" class="page-view">
+        <div class="page-title"><div><h2>Security overview</h2><p>USB data-loss activity and policy outcomes</p></div><div class="page-actions"><label class="auto-refresh"><input id="auto-refresh" type="checkbox" checked> Auto refresh</label><button id="refresh-button" class="button button-secondary" type="button">Refresh</button></div></div>
+        <section class="summary-grid" aria-label="Security summary">
+          <article class="metric metric-total"><p>Total incidents</p><strong id="total-incidents">0</strong><span id="latest-event">No activity recorded</span></article>
+          <article class="metric metric-critical"><p>High risk</p><strong id="high-risk">0</strong><span>Score 75 or above</span></article>
+          <article class="metric metric-score"><p>Average risk</p><strong><span id="average-risk">0</span><small>/100</small></strong><span>Across all incidents</span></article>
+          <article class="metric metric-blocked"><p>Block decisions</p><strong id="blocked-count">0</strong><span id="blocked-rate">0% of activity</span></article>
+        </section>
+        <section class="analytics-grid">
+          <article class="panel"><div class="panel-heading"><div><h2>Classification overview</h2><p>Incident volume by sensitivity</p></div></div><div id="classification-chart" class="bar-chart" aria-label="Classification chart"></div></article>
+          <article class="panel"><div class="panel-heading"><div><h2>Policy outcomes</h2><p>Actions selected by current rules</p></div></div><div id="decision-chart" class="outcome-chart" aria-label="Policy outcome chart"></div></article>
+          <article class="panel"><div class="panel-heading"><div><h2>Sensitive data</h2><p>Most frequent detection types</p></div></div><div id="sensitive-types" class="type-list"></div></article>
+        </section>
+      </section>
+
+      <section id="view-incidents" class="page-view" hidden>
+        <div class="page-title"><div><h2>Incident activity</h2><p><span id="visible-count">0</span> records shown</p></div><a class="button button-primary" href="/api/export.csv">Export incidents</a></div>
+        <form id="filters" class="incident-filters">
+          <div class="filter-bar primary-filter-bar">
+            <label class="search-field"><span>Search incidents</span><input id="search" type="search" placeholder="ID, user, device, file, or hash"></label>
+            <label><span>Risk level</span><select id="risk-level"><option value="">All risk levels</option><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></label>
+            <label><span>Action</span><select id="decision"><option value="">All actions</option><option>Allow</option><option>Alert</option><option>Block</option></select></label>
+            <label><span>Status</span><select id="incident-status"><option value="">All statuses</option><option>Open</option><option>Investigating</option><option>Resolved</option><option>False Positive</option><option>Escalated</option><option>Pending User Confirmation</option><option>Pending Manager Approval</option><option>Closed</option></select></label>
+            <label><span>Date</span><select id="date-preset"><option value="">All time</option><option value="1">Last 24 hours</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select></label>
+            <button id="clear-filters" class="button button-secondary" type="button">Clear</button>
+          </div>
+          <details class="advanced-filter-panel">
+            <summary>More filters <span id="advanced-filter-count"></span></summary>
+            <div class="advanced-filter-grid">
+              <label><span>Incident ID</span><input id="filter-incident-id" placeholder="INC-..."></label>
+              <label><span>Username</span><input id="filter-user-name"></label>
+              <label><span>Computer name</span><input id="filter-computer-name"></label>
+              <label><span>USB device name</span><input id="filter-usb-name"></label>
+              <label><span>USB serial number</span><input id="filter-usb-serial"></label>
+              <label><span>File name</span><input id="filter-file-name"></label>
+              <label><span>File type</span><input id="filter-file-type" placeholder=".xlsx"></label>
+              <label><span>Assigned analyst</span><select id="filter-assignee"><option value="">All analysts</option></select></label>
+              <label><span>Assignment</span><select id="filter-assignment-state"><option value="">Assigned or unassigned</option><option value="unassigned">Unassigned only</option><option value="assigned">Assigned only</option></select></label>
+              <label><span>Classification</span><select id="classification"><option value="">All classifications</option><option>Public</option><option>Internal</option><option>Confidential</option><option>Restricted</option></select></label>
+              <label><span>Minimum score</span><input id="min-risk" type="number" min="0" max="100" value="0"></label>
+              <label><span>Maximum score</span><input id="max-risk" type="number" min="0" max="100" value="100"></label>
+              <label><span>From</span><input id="date-from" type="datetime-local"></label>
+              <label><span>To</span><input id="date-to" type="datetime-local"></label>
+            </div>
+          </details>
+        </form>
+        <div class="table-shell"><table><thead><tr><th>Time</th><th>User &amp; device</th><th>File</th><th>Classification</th><th>Risk</th><th>Action</th><th>Status</th><th>Analyst</th></tr></thead><tbody id="incident-rows"></tbody></table><div id="empty-state" class="empty-state" hidden><strong>No incidents found</strong><span>Recorded USB activity will appear here.</span></div></div>
+      </section>
+
+      <section id="view-policies" class="page-view" hidden>
+        <div class="page-title"><div><h2>Policy management</h2><p>Prioritized rules applied to monitored transfers</p></div><button id="new-policy-button" data-permission="policies.manage" class="button button-primary" type="button">Create policy</button></div>
+        <div class="table-shell"><table class="management-table"><thead><tr><th>Priority</th><th>Policy</th><th>Conditions</th><th>Action</th><th>State</th><th>Controls</th></tr></thead><tbody id="policy-rows"></tbody></table><div id="policy-empty" class="empty-state" hidden><strong>No policies configured</strong></div></div>
+      </section>
+
+      <section id="view-access" class="page-view" hidden>
+        <div class="page-title"><div><h2>Users and roles</h2><p>Accounts and least-privilege assignments</p></div><button id="new-user-button" class="button button-primary" type="button">Create user</button></div>
+        <div class="table-shell"><table class="management-table"><thead><tr><th>User</th><th>Department</th><th>Role</th><th>State</th><th>Controls</th></tr></thead><tbody id="user-rows"></tbody></table></div>
+        <div class="page-title subsection-title"><div><h2>USB authorization</h2><p>Authorized, unauthorized, and blocked storage devices</p></div><button id="new-usb-button" class="button button-primary" type="button">Register device</button></div>
+        <div class="table-shell"><table class="management-table"><thead><tr><th>Device</th><th>Device ID</th><th>Authorization</th><th>Updated</th><th>Controls</th></tr></thead><tbody id="usb-rows"></tbody></table><div id="usb-empty" class="empty-state" hidden><strong>No USB devices registered</strong></div></div>
+      </section>
+
+      <section id="view-audit" class="page-view" hidden>
+        <div class="page-title"><div><h2>Audit log</h2><p>Authentication and administrative activity</p></div><button id="refresh-audit" class="button button-secondary" type="button">Refresh</button></div>
+        <div class="table-shell"><table class="management-table"><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th></tr></thead><tbody id="audit-rows"></tbody></table><div id="audit-empty" class="empty-state" hidden><strong>No audit activity recorded</strong></div></div>
+      </section>
+      </main>
+    </div>
+  </div>
+
+  <dialog id="incident-dialog" class="wide-dialog"><div class="dialog-heading"><div><p class="eyebrow">Incident details</p><h2 id="detail-id">Incident</h2></div><button class="close-button" data-close="incident-dialog" type="button" aria-label="Close incident details">&times;</button></div><div id="detail-content"></div></dialog>
+
+  <dialog id="policy-dialog" class="wide-dialog"><form id="policy-form"><div class="dialog-heading"><div><p class="eyebrow">Policy</p><h2 id="policy-dialog-title">Create policy</h2></div><button class="close-button" data-close="policy-dialog" type="button" aria-label="Close policy editor">&times;</button></div><div class="dialog-body"><input id="policy-id" type="hidden"><div class="form-grid"><label class="full"><span>Name</span><input id="policy-name" required maxlength="100"></label><label class="full"><span>Description</span><textarea id="policy-description" rows="2"></textarea></label><label><span>Priority</span><input id="policy-priority" type="number" min="1" max="999" value="100" required></label><label><span>Action</span><select id="policy-action"><option>Allow</option><option>Alert</option><option>Block</option></select></label><label><span>Risk score override</span><input id="policy-risk" type="number" min="0" max="100" placeholder="No override"></label><label class="check-field"><input id="policy-enabled" type="checkbox" checked><span>Policy enabled</span></label><label class="check-field"><input id="policy-notify" type="checkbox" checked><span>Notify SOC</span></label></div><div class="condition-heading"><h3>Conditions</h3><button id="add-condition" class="button button-secondary" type="button">Add condition</button></div><div id="condition-list" class="condition-list"></div><p id="policy-error" class="form-error" hidden></p></div><div class="dialog-actions"><button class="button button-secondary" data-close="policy-dialog" type="button">Cancel</button><button class="button button-primary" type="submit">Save policy</button></div></form></dialog>
+
+  <dialog id="user-dialog"><form id="user-form"><div class="dialog-heading"><div><p class="eyebrow">Access control</p><h2 id="user-dialog-title">Create user</h2></div><button class="close-button" data-close="user-dialog" type="button" aria-label="Close user editor">&times;</button></div><div class="dialog-body"><input id="user-id" type="hidden"><div class="form-grid"><label><span>Username</span><input id="user-name" required></label><label><span>Department</span><input id="user-department"></label><label><span>Role</span><select id="user-role"></select></label><label><span>Password</span><input id="user-password" type="password" minlength="8"></label><label class="check-field"><input id="user-enabled" type="checkbox" checked><span>Account enabled</span></label></div><p id="user-error" class="form-error" hidden></p></div><div class="dialog-actions"><button class="button button-secondary" data-close="user-dialog" type="button">Cancel</button><button class="button button-primary" type="submit">Save user</button></div></form></dialog>
+
+  <dialog id="usb-dialog"><form id="usb-form"><div class="dialog-heading"><div><p class="eyebrow">USB authorization</p><h2>Register device</h2></div><button class="close-button" data-close="usb-dialog" type="button" aria-label="Close USB editor">&times;</button></div><div class="dialog-body"><div class="form-grid"><label><span>Device ID or serial</span><input id="usb-id" required></label><label><span>Display name</span><input id="usb-name"></label><label class="full"><span>Authorization</span><select id="usb-status"><option value="authorized">Authorized</option><option value="unauthorized">Unauthorized</option><option value="blocked">Blocked / blacklisted</option></select></label></div><p id="usb-error" class="form-error" hidden></p></div><div class="dialog-actions"><button class="button button-secondary" data-close="usb-dialog" type="button">Cancel</button><button class="button button-primary" type="submit">Save device</button></div></form></dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

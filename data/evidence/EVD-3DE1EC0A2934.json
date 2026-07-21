@@ -1,0 +1,38 @@
+{
+  "evidence_id": "EVD-3DE1EC0A2934",
+  "incident_id": "INC-3F62507C6AAB",
+  "collected_at": "2026-07-20T13:43:59.988730+00:00",
+  "retained_until": "2026-10-18T13:43:59.988730+00:00",
+  "file_name": "00_public_company_news.txt",
+  "file_path": "C:\\Users\\M S I\\Desktop\\usb-operation-demo\\synthetic_test_data\\00_public_company_news.txt",
+  "file_size": 159,
+  "file_type": ".txt",
+  "file_hashes": {
+    "sha256": "23e01cc84514e6672e6d67561aff6b67557a4edc7ef2de23d59a30ec020ea613",
+    "sha1": "2ffb26ab48f35d8057eeca971fa8cdfef848dd50",
+    "md5": "defbf0f310af4c7d9407f8862512141d"
+  },
+  "usb_serial_number": "",
+  "usb_manufacturer": "",
+  "usb_device_name": "Synthetic Test USB",
+  "username": "M S I",
+  "computer_name": "DESKTOP-VKJ595B",
+  "ip_addresses": [
+    "172.23.160.1",
+    "192.168.100.16",
+    "fe80::4cd0:1d21:96cb:9b0",
+    "fe80::ade7:6caa:7ff6:57b1"
+  ],
+  "event_time": "2026-07-20T13:43:59.987104+00:00",
+  "sensitive_findings": [],
+  "matched_policies": [
+    "Block TXT on personal USB"
+  ],
+  "action_taken": "Block",
+  "encryption": "Windows DPAPI current-user",
+  "protected_copy_preserved": true,
+  "protected_copy_error": null,
+  "protected_copy_name": "EVD-3DE1EC0A2934.dpapi",
+  "protected_copy_sha256": "6575d3b3ee70b6ba6cae49b269b3c672807fb3c937c40c27d797fc11fb09a8a1",
+  "manifest_sha256": "43de109df0daf251071439f48b001c6f26eb55c3d549e70f14b19d53b1927220"
+}
