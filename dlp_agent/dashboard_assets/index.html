@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>USB DLP Control Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -23,11 +26,12 @@
       <nav id="workspace-nav" class="workspace-nav" aria-label="Platform sections">
         <button data-view="overview" class="nav-button active" type="button"><span class="nav-glyph">01</span><span>Overview</span></button>
         <button data-view="incidents" class="nav-button" type="button"><span class="nav-glyph">02</span><span>Incidents</span></button>
-        <button data-view="policies" data-permission="policies.view" class="nav-button" type="button"><span class="nav-glyph">03</span><span>Policies</span></button>
-        <button data-view="access" data-permission="users.manage" class="nav-button" type="button"><span class="nav-glyph">04</span><span>Access control</span></button>
-        <button data-view="audit" data-permission="audit.view" class="nav-button" type="button"><span class="nav-glyph">05</span><span>Audit log</span></button>
+        <button data-view="history" class="nav-button" type="button"><span class="nav-glyph">03</span><span>History</span></button>
+        <button data-view="policies" data-permission="policies.view" class="nav-button" type="button"><span class="nav-glyph">04</span><span>Policies</span></button>
+        <button data-view="access" data-permission="users.manage" class="nav-button" type="button"><span class="nav-glyph">05</span><span>Access control</span></button>
+        <button data-view="audit" data-permission="audit.view" class="nav-button" type="button"><span class="nav-glyph">06</span><span>Audit log</span></button>
       </nav>
-      <div class="sidebar-footer"><span class="live-status"><span class="status-dot"></span><span><strong>Monitoring active</strong><small>USB agent connected</small></span></span></div>
+
     </aside>
 
     <div class="workspace">
@@ -43,7 +47,13 @@
 
       <main>
       <section id="view-overview" class="page-view">
-        <div class="page-title"><div><h2>Security overview</h2><p>USB data-loss activity and policy outcomes</p></div><div class="page-actions"><label class="auto-refresh"><input id="auto-refresh" type="checkbox" checked> Auto refresh</label><button id="refresh-button" class="button button-secondary" type="button">Refresh</button></div></div>
+        <div class="welcome-banner">
+          <div class="welcome-content">
+            <h2>Welcome to USB DLP Control Center</h2>
+            <p>Your centralized hub for data loss prevention. Monitor real-time USB activity, enforce security policies, manage incidents, and control access across your organization.</p>
+          </div>
+        </div>
+        <div class="page-title"><div><h2>Security overview</h2><p>High-level summary of USB data-loss activity and policy outcomes.</p></div><div class="page-actions"><label class="auto-refresh"><input id="auto-refresh" type="checkbox" checked> Auto refresh</label><button id="refresh-button" class="button button-secondary" type="button">Refresh</button></div></div>
         <section class="summary-grid" aria-label="Security summary">
           <article class="metric metric-total"><p>Total incidents</p><strong id="total-incidents">0</strong><span id="latest-event">No activity recorded</span></article>
           <article class="metric metric-critical"><p>High risk</p><strong id="high-risk">0</strong><span>Score 75 or above</span></article>
@@ -58,7 +68,7 @@
       </section>
 
       <section id="view-incidents" class="page-view" hidden>
-        <div class="page-title"><div><h2>Incident activity</h2><p><span id="visible-count">0</span> records shown</p></div><a class="button button-primary" href="/api/export.csv">Export incidents</a></div>
+        <div class="page-title"><div><h2>Incident activity</h2><p>Review, search, and manage security incidents triggered by USB activity. Currently showing <span id="visible-count">0</span> records.</p></div><a class="button button-primary" href="/api/export.csv">Export incidents</a></div>
         <form id="filters" class="incident-filters">
           <div class="filter-bar primary-filter-bar">
             <label class="search-field"><span>Search incidents</span><input id="search" type="search" placeholder="ID, user, device, file, or hash"></label>
@@ -88,23 +98,28 @@
             </div>
           </details>
         </form>
-        <div class="table-shell"><table><thead><tr><th>Time</th><th>User &amp; device</th><th>File</th><th>Classification</th><th>Risk</th><th>Action</th><th>Status</th><th>Analyst</th></tr></thead><tbody id="incident-rows"></tbody></table><div id="empty-state" class="empty-state" hidden><strong>No incidents found</strong><span>Recorded USB activity will appear here.</span></div></div>
+        <div class="table-shell"><table><thead><tr><th>Time</th><th>User &amp; device</th><th>File</th><th>Classification</th><th>Risk</th><th>Status</th><th>Analyst</th><th>Action</th></tr></thead><tbody id="incident-rows"></tbody></table><div id="empty-state" class="empty-state" hidden><strong>No incidents found</strong><span>Recorded USB activity will appear here.</span></div></div>
+      </section>
+
+      <section id="view-history" class="page-view" hidden>
+        <div class="page-title"><div><h2>Enforcement History</h2><p>Review resolved incidents and manual enforcement actions. Currently showing <span id="history-visible-count">0</span> records.</p></div></div>
+        <div class="table-shell"><table><thead><tr><th>Time</th><th>User &amp; device</th><th>File</th><th>Classification</th><th>Risk</th><th>Status</th><th>Analyst</th><th>Outcome</th></tr></thead><tbody id="history-rows"></tbody></table><div id="history-empty-state" class="empty-state" hidden><strong>No history found</strong><span>Resolved records will appear here.</span></div></div>
       </section>
 
       <section id="view-policies" class="page-view" hidden>
-        <div class="page-title"><div><h2>Policy management</h2><p>Prioritized rules applied to monitored transfers</p></div><button id="new-policy-button" data-permission="policies.manage" class="button button-primary" type="button">Create policy</button></div>
+        <div class="page-title"><div><h2>Policy management</h2><p>Define rules to automatically Allow, Alert, or Block USB transfers based on risk conditions.</p></div><button id="new-policy-button" data-permission="policies.manage" class="button button-primary" type="button">Create policy</button></div>
         <div class="table-shell"><table class="management-table"><thead><tr><th>Priority</th><th>Policy</th><th>Conditions</th><th>Action</th><th>State</th><th>Controls</th></tr></thead><tbody id="policy-rows"></tbody></table><div id="policy-empty" class="empty-state" hidden><strong>No policies configured</strong></div></div>
       </section>
 
       <section id="view-access" class="page-view" hidden>
-        <div class="page-title"><div><h2>Users and roles</h2><p>Accounts and least-privilege assignments</p></div><button id="new-user-button" class="button button-primary" type="button">Create user</button></div>
+        <div class="page-title"><div><h2>Users and roles</h2><p>Manage analyst accounts and assign least-privilege roles to your security team.</p></div><button id="new-user-button" class="button button-primary" type="button">Create user</button></div>
         <div class="table-shell"><table class="management-table"><thead><tr><th>User</th><th>Department</th><th>Role</th><th>State</th><th>Controls</th></tr></thead><tbody id="user-rows"></tbody></table></div>
-        <div class="page-title subsection-title"><div><h2>USB authorization</h2><p>Authorized, unauthorized, and blocked storage devices</p></div><button id="new-usb-button" class="button button-primary" type="button">Register device</button></div>
+        <div class="page-title subsection-title"><div><h2>USB authorization</h2><p>Register specific USB devices to explicitly authorize, leave unauthorized, or block them.</p></div><button id="new-usb-button" class="button button-primary" type="button">Register device</button></div>
         <div class="table-shell"><table class="management-table"><thead><tr><th>Device</th><th>Device ID</th><th>Authorization</th><th>Updated</th><th>Controls</th></tr></thead><tbody id="usb-rows"></tbody></table><div id="usb-empty" class="empty-state" hidden><strong>No USB devices registered</strong></div></div>
       </section>
 
       <section id="view-audit" class="page-view" hidden>
-        <div class="page-title"><div><h2>Audit log</h2><p>Authentication and administrative activity</p></div><button id="refresh-audit" class="button button-secondary" type="button">Refresh</button></div>
+        <div class="page-title"><div><h2>Audit log</h2><p>Track all authentication and administrative actions taken within the system for compliance.</p></div><button id="refresh-audit" class="button button-secondary" type="button">Refresh</button></div>
         <div class="table-shell"><table class="management-table"><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th></tr></thead><tbody id="audit-rows"></tbody></table><div id="audit-empty" class="empty-state" hidden><strong>No audit activity recorded</strong></div></div>
       </section>
       </main>
@@ -117,7 +132,7 @@
 
   <dialog id="user-dialog"><form id="user-form"><div class="dialog-heading"><div><p class="eyebrow">Access control</p><h2 id="user-dialog-title">Create user</h2></div><button class="close-button" data-close="user-dialog" type="button" aria-label="Close user editor">&times;</button></div><div class="dialog-body"><input id="user-id" type="hidden"><div class="form-grid"><label><span>Username</span><input id="user-name" required></label><label><span>Department</span><input id="user-department"></label><label><span>Role</span><select id="user-role"></select></label><label><span>Password</span><input id="user-password" type="password" minlength="8"></label><label class="check-field"><input id="user-enabled" type="checkbox" checked><span>Account enabled</span></label></div><p id="user-error" class="form-error" hidden></p></div><div class="dialog-actions"><button class="button button-secondary" data-close="user-dialog" type="button">Cancel</button><button class="button button-primary" type="submit">Save user</button></div></form></dialog>
 
-  <dialog id="usb-dialog"><form id="usb-form"><div class="dialog-heading"><div><p class="eyebrow">USB authorization</p><h2>Register device</h2></div><button class="close-button" data-close="usb-dialog" type="button" aria-label="Close USB editor">&times;</button></div><div class="dialog-body"><div class="form-grid"><label><span>Device ID or serial</span><input id="usb-id" required></label><label><span>Display name</span><input id="usb-name"></label><label class="full"><span>Authorization</span><select id="usb-status"><option value="authorized">Authorized</option><option value="unauthorized">Unauthorized</option><option value="blocked">Blocked / blacklisted</option></select></label></div><p id="usb-error" class="form-error" hidden></p></div><div class="dialog-actions"><button class="button button-secondary" data-close="usb-dialog" type="button">Cancel</button><button class="button button-primary" type="submit">Save device</button></div></form></dialog>
+  <dialog id="usb-dialog"><form id="usb-form"><div class="dialog-heading"><div><p class="eyebrow">USB authorization</p><h2>Register device</h2></div><button class="close-button" data-close="usb-dialog" type="button" aria-label="Close USB editor">&times;</button></div><div class="dialog-body"><div class="form-grid"><label><span>Device ID or serial</span><input id="usb-id" required></label><label><span>Display name</span><input id="usb-name"></label><label class="full"><span>Authorization</span><select id="usb-status"><option value="authorized">Authorized</option><option value="unauthorized">Unauthorized</option></select></label></div><p id="usb-error" class="form-error" hidden></p></div><div class="dialog-actions"><button class="button button-secondary" data-close="usb-dialog" type="button">Cancel</button><button class="button button-primary" type="submit">Save device</button></div></form></dialog>
 
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="/app.js"></script>

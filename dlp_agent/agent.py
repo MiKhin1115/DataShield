@@ -18,6 +18,7 @@ from .evidence_vault import EvidenceVault, system_context
 from .file_hashing import hash_file
 from .file_monitor import FileCopyEvent, UsbFileMonitor
 from .incident_store import IncidentStore
+from .network_monitor import NetworkConnectionEvent, NetworkMonitor
 from .policy import PolicyEngine
 from .policy_store import PolicyStore
 from .rbac import UserStore
@@ -113,6 +114,7 @@ class UsbDlpAgent:
         self.usb_enforcer = usb_enforcer or WindowsUsbEnforcer()
         self.interval_seconds = interval_seconds
         self.monitor = UsbFileMonitor()
+        self.network_monitor = NetworkMonitor()
         self.devices: dict[str, UsbDevice] = {}
         self.device_inserted_at: dict[str, str] = {}
 
@@ -434,6 +436,118 @@ class UsbDlpAgent:
         self.incident_store.append(incident_record)
         return incident_record
 
+    def process_network_event(self, event: NetworkConnectionEvent) -> dict[str, object]:
+        user_name = getpass.getuser()
+        managed_user = self.user_store.find_by_username(user_name)
+        department = str(managed_user.get("department") if managed_user else os.environ.get("USB_DLP_DEPARTMENT", "Unknown"))
+        computer_name, ip_addresses = system_context()
+        
+        ip = event.remote_address
+        is_internal = ip.startswith("192.168.") or ip.startswith("10.") or \
+                      (ip.startswith("172.") and 16 <= int(ip.split(".")[1]) <= 31)
+        
+        ip_classification = "Internal" if is_internal else "External"
+        
+        file_name_display = event.extracted_file_name if event.extracted_file_name != event.process_name else event.process_name
+        
+        findings = []
+        if event.extracted_file_path and not event.extracted_file_path.startswith("PID:"):
+            try:
+                result = self.scanner.scan_file(Path(event.extracted_file_path))
+                findings = result.findings
+            except Exception:
+                pass
+        
+        timeline = [
+            self._timeline_event("connection_detected", f"Outbound connection detected: {file_name_display}", f"{event.process_name} (PID: {event.pid}) connected to {event.remote_address}:{event.remote_port} ({ip_classification})"),
+        ]
+
+        assessment = self.policy_engine.assess(
+            findings,
+            None,
+            {
+                "file_extension": event.extracted_file_path.split('.')[-1].lower() if '.' in event.extracted_file_path else "",
+                "user_name": user_name,
+                "department": department,
+                "transfer_time": datetime.now().strftime("%H:%M"),
+                "network_exfiltration": True,
+            }
+        )
+
+        if ip_classification == "External" and event.process_name.lower() in ("powershell.exe", "cmd.exe"):
+            import psutil
+            from .firewall_enforcer import block_ip_firewall
+            
+            block_ip_firewall(event.remote_address)
+            try:
+                psutil.Process(event.pid).terminate()
+                action_desc = f"Process terminated and firewall rule added for {event.remote_address} (External)"
+            except (psutil.NoSuchProcess, psutil.AccessDenied, ValueError, TypeError):
+                action_desc = f"Firewall rule added for {event.remote_address} (External)"
+                
+            timeline.append(self._timeline_event("policy_decision", "Policy action selected: Block (Automated)", "Network Exfiltration Prevention"))
+            policy_decision = "Block"
+            risk_score = max(85, assessment.risk_score)
+        else:
+            action_desc = f"Connection detected to {event.remote_address} ({ip_classification})"
+            timeline.append(self._timeline_event("policy_decision", f"Policy action selected: {assessment.policy_decision}", "Network Exfiltration Prevention"))
+            policy_decision = assessment.policy_decision
+            risk_score = assessment.risk_score
+        
+        incident: dict[str, object] = {
+            "incident_id": f"INC-{uuid4().hex[:12].upper()}",
+            "incident_type": "network_exfiltration",
+            "event_time": utc_now_iso(),
+            "user_name": user_name,
+            "department": department,
+            "computer_name": computer_name,
+            "ip_addresses": ip_addresses,
+            "device_id": "NETWORK",
+            "device_name": "Network Connection",
+            "usb_serial_number": "",
+            "usb_manufacturer": "",
+            "usb_model": "",
+            "usb_authorization_status": "",
+            "drive": "",
+            "file_name": event.extracted_file_name,
+            "file_type": "exe",
+            "file_path": event.extracted_file_path,
+            "remote_ip": event.remote_address,
+            "process_pid": event.pid,
+            "file_size": 0,
+            "change_type": "network_connection",
+            "sensitive_findings": [asdict(f) for f in findings],
+            "finding_count": len(findings),
+            "scan_readable": True,
+            "scan_error": None,
+            "file_hashes": {},
+            "hash_error": None,
+            "duplicate_incident_count": 0,
+            "file_classification": assessment.file_classification,
+            "recommended_classification": assessment.file_classification,
+            "risk_score": risk_score,
+            "policy_decision": policy_decision,
+            "action_taken": action_desc,
+            "policy_reasons": assessment.policy_reasons + [f"Process attempted to connect to a restricted {ip_classification} IP address"],
+            "matched_policy_ids": assessment.matched_policy_ids + ["NET-EXFIL-001"],
+            "matched_policy_names": assessment.matched_policy_names + ["Network Exfiltration Prevention"],
+            "notify_soc": True,
+            "incident_status": "Open",
+            "assigned_to": "",
+            "status_history": [],
+            "assignment_history": [],
+            "investigation_notes": [],
+            "timeline": timeline,
+        }
+        
+        alert_results = self.alerter.notify(incident)
+        if alert_results:
+            channels = ", ".join(result.channel for result in alert_results if result.sent)
+            self._append_timeline(incident, "soc_alert", "SOC alert generated", channels or "Alert delivery attempted")
+            
+        self.incident_store.append(incident)
+        return incident
+
     @staticmethod
     def _timeline_event(
         event_type: str,
@@ -514,6 +628,10 @@ class UsbDlpAgent:
 
             for file_event in self.monitor.poll():
                 incident_record = self.process_file_event(file_event)
+                print(json.dumps(incident_record, ensure_ascii=False))
+
+            for net_event in self.network_monitor.poll():
+                incident_record = self.process_network_event(net_event)
                 print(json.dumps(incident_record, ensure_ascii=False))
 
             time.sleep(self.interval_seconds)

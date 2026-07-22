@@ -115,6 +115,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         self._serve_asset(parsed.path)
 
+    def do_OPTIONS(self) -> None:
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Private-Network", "true")
+        self.send_header("Access-Control-Max-Age", "86400")
+        self.end_headers()
+
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         path_parts = parsed.path.strip("/").split("/")
@@ -123,6 +132,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/logout":
             self._logout()
+            return
+        if parsed.path == "/api/browser_incident":
+            self._handle_browser_incident()
             return
         if parsed.path == "/api/policies":
             if self._require_mutation("policies.manage"):
@@ -143,6 +155,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
         ):
             if self._require_mutation("ai_analysis.generate"):
                 self._generate_ai_analysis(unquote(path_parts[2]))
+            return
+        if (
+            len(path_parts) == 4
+            and path_parts[:2] == ["api", "incidents"]
+            and path_parts[3] == "enforce"
+        ):
+            if self._require_mutation("incidents.update"):
+                self._enforce_incident(unquote(path_parts[2]))
             return
         if parsed.path.startswith("/api/incidents/"):
             if self._require_mutation("incidents.update"):
@@ -178,6 +198,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/api/usb-devices/"):
             if self._require("usb.manage"):
                 self._delete_usb(unquote(parsed.path.rsplit("/", 1)[-1]))
+            return
+        if parsed.path.startswith("/api/incidents/"):
+            if self._require("incidents.update"):
+                incident_id = unquote(parsed.path.rsplit("/", 1)[-1])
+                if self.store.delete(incident_id):
+                    self._audit_change("incident_deleted", "incident", incident_id)
+                    self._serve_json({"status": "ok"})
+                else:
+                    self._serve_json({"error": "Incident not found"}, HTTPStatus.NOT_FOUND)
             return
         self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -349,6 +378,112 @@ class DashboardHandler(BaseHTTPRequestHandler):
             f"analysis_id={analysis.get('analysis_id')}; model={analysis.get('model_used')}",
         )
         self._serve_json({"analysis": analysis, "cached": cached})
+
+    def _enforce_incident(self, incident_id: str) -> None:
+        body = self._json_body()
+        action = str(body.get("action", ""))
+        
+        incident = self.store.get(incident_id)
+        if not incident:
+            self._serve_json({"error": "Incident not found"}, HTTPStatus.NOT_FOUND)
+            return
+        
+        if action == "block":
+            if incident.get("incident_type") == "network_exfiltration":
+                import psutil
+                from .firewall_enforcer import block_ip_firewall
+                
+                remote_ip = incident.get("remote_ip")
+                if remote_ip:
+                    block_ip_firewall(str(remote_ip))
+                    
+                pid = incident.get("process_pid")
+                if pid:
+                    try:
+                        psutil.Process(int(pid)).terminate()
+                    except (ValueError, psutil.NoSuchProcess, psutil.AccessDenied, TypeError):
+                        pass
+                
+                if incident.get("device_id") == "BROWSER_EXT":
+                    for proc in psutil.process_iter(['name']):
+                        if proc.info['name'] in ['chrome.exe']:
+                            try:
+                                proc.kill()
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                pass
+            else:
+                drive = str(incident.get("drive", ""))
+                if drive:
+                    from .usb_enforcement import WindowsUsbEnforcer
+                    enforcer = WindowsUsbEnforcer()
+                    enforcer.wipe_and_block(drive)
+        
+        changes = {"manual_action": action, "incident_status": "Closed" if action == "allow" else "Resolved"}
+        updated = self.store.update(incident_id, changes)
+        if updated is None:
+            self._serve_json({"error": "Failed to update"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+            
+        self._audit_change(f"incident_manual_{action}", "incident", incident_id)
+        self._serve_json(self._public_incident(updated))
+
+    def _handle_browser_incident(self) -> None:
+        body = self._json_body()
+        file_name = str(body.get("file_name", "Unknown"))
+        target_url = str(body.get("url", "Unknown"))
+        action = str(body.get("action", "Blocked"))
+        
+        from uuid import uuid4
+        from datetime import datetime, timezone
+        import getpass
+        import socket
+        
+        def utc_now_iso() -> str:
+            return datetime.now(timezone.utc).isoformat()
+        import socket
+        
+        incident = {
+            "incident_id": f"INC-{uuid4().hex[:12].upper()}",
+            "incident_type": "network_exfiltration",
+            "event_time": utc_now_iso(),
+            "user_name": getpass.getuser(),
+            "department": "Unknown",
+            "computer_name": socket.gethostname(),
+            "ip_addresses": ["127.0.0.1"],
+            "device_id": "BROWSER_EXT",
+            "device_name": "Enterprise Browser Extension",
+            "usb_serial_number": "",
+            "usb_manufacturer": "",
+            "usb_model": "",
+            "usb_authorization_status": "",
+            "drive": "",
+            "file_name": file_name,
+            "file_type": "Data Payload",
+            "file_path": f"Target: {target_url}",
+            "file_size": 0,
+            "change_type": "browser_upload",
+            "sensitive_findings": [],
+            "file_classification": "Restricted",
+            "recommended_classification": "Restricted",
+            "risk_score": 95,
+            "policy_decision": "Block",
+            "action_taken": action,
+            "policy_reasons": ["Browser Extension detected sensitive payload upload over HTTPS"],
+            "matched_policy_ids": ["EXT-HTTPS-001"],
+            "matched_policy_names": ["HTTPS Payload Inspection"],
+            "manual_action": "",
+            "incident_status": "Open",
+            "timeline": [
+                {
+                    "time": utc_now_iso(),
+                    "event_type": "HTTPS Inspection",
+                    "description": f"Browser extension intercepted upload to {target_url}",
+                    "details": f"Payload contained sensitive data. Upload blocked natively in browser."
+                }
+            ]
+        }
+        self.store.append(incident)
+        self._serve_json({"status": "ok"})
 
     def _serve_incidents(self, query: dict[str, list[str]]) -> None:
         try:
@@ -542,6 +677,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Private-Network", "true")
         for name, header_value in (headers or {}).items():
             self.send_header(name, header_value)
         self.send_header("Content-Length", str(len(body)))

@@ -1,8 +1,8 @@
 {
-  "evidence_id": "EVD-4AF9D8E54CC0",
-  "incident_id": "INC-5B44DA656B61",
-  "collected_at": "2026-07-20T16:30:17.528136+00:00",
-  "retained_until": "2026-10-18T16:30:17.528136+00:00",
+  "evidence_id": "EVD-2D822BE1893C",
+  "incident_id": "INC-7C2B6515DCF4",
+  "collected_at": "2026-07-22T08:25:21.324561+00:00",
+  "retained_until": "2026-10-20T08:25:21.324561+00:00",
   "file_name": "05_financial_report.txt",
   "file_path": "D:\\05_financial_report.txt",
   "file_size": 148,
@@ -18,12 +18,13 @@
   "username": "M S I",
   "computer_name": "DESKTOP-VKJ595B",
   "ip_addresses": [
+    "172.21.0.1",
     "172.23.160.1",
     "192.168.100.16",
-    "fe80::4cd0:1d21:96cb:9b0",
-    "fe80::ade7:6caa:7ff6:57b1"
+    "fe80::456f:5e46:e1dc:9485",
+    "fe80::4cd0:1d21:96cb:9b0"
   ],
-  "event_time": "2026-07-20T16:30:17.506537+00:00",
+  "event_time": "2026-07-22T08:25:21.295417+00:00",
   "sensitive_findings": [
     {
       "kind": "confidential_keyword",
@@ -46,13 +47,13 @@
   ],
   "matched_policies": [
     "Block TXT on personal USB",
-    "usb unauthorized"
+    "txt on filename"
   ],
-  "action_taken": "Allow",
+  "action_taken": "Alert",
   "encryption": "Windows DPAPI current-user",
   "protected_copy_preserved": true,
   "protected_copy_error": null,
-  "protected_copy_name": "EVD-4AF9D8E54CC0.dpapi",
-  "protected_copy_sha256": "53b41c99b90529d64863e0ba9f2a21d7fdd8e323f6ba6a6da44c9dcf9bf4c26e",
-  "manifest_sha256": "2a6cccdae736e7f1a12787de84b9d4fb130e561f150f6b7617aca08f4d24ff44"
+  "protected_copy_name": "EVD-2D822BE1893C.dpapi",
+  "protected_copy_sha256": "79c102e9c1ede39b75861bfb091c424e40d5a01984c8dd94c0f66fc81bb03562",
+  "manifest_sha256": "d4263a3caad8376f8ac2271c93c3e2066ed889c8e0316b7d7f9f0828a259147d"
 }

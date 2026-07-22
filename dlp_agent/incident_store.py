@@ -29,6 +29,7 @@ class IncidentStore:
             "assignment_history",
             "investigation_notes",
             "timeline",
+            "manual_action",
         }
         clean_changes = {key: value for key, value in changes.items() if key in allowed}
         with self._lock:
@@ -39,6 +40,15 @@ class IncidentStore:
                     self._write_all_unlocked(incidents)
                     return incident
         return None
+
+    def delete(self, incident_id: str) -> bool:
+        with self._lock:
+            incidents = self.read_all_unlocked()
+            filtered = [inc for inc in incidents if inc.get("incident_id") != incident_id]
+            if len(filtered) < len(incidents):
+                self._write_all_unlocked(filtered)
+                return True
+            return False
 
     def count_by_sha256(self, sha256: str) -> int:
         if not sha256:

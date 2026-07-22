@@ -140,10 +140,22 @@ function switchView(viewName) {
   document.querySelectorAll(".nav-button").forEach((button) => { button.classList.toggle("active", button.dataset.view === viewName); });
   if (viewName === "overview") loadDashboard(false);
   if (viewName === "incidents") loadIncidents();
+  if (viewName === "history") loadIncidents(); // History uses same data fetch
   if (viewName === "policies") loadPolicies();
   if (viewName === "access") loadAccess();
   if (viewName === "audit") loadAudit();
 }
+
+window.deleteIncident = async function(e, id) {
+  e.stopPropagation();
+  if (!confirm("Are you sure you want to permanently delete this incident?")) return;
+  try {
+    await api(`/api/incidents/${encodeURIComponent(id)}`, { method: "DELETE" });
+    loadIncidents();
+  } catch(err) {
+    alert("Failed to delete incident: " + err.message);
+  }
+};
 
 async function loadDashboard(showMessage = false) {
   try {
@@ -183,6 +195,7 @@ async function loadIncidents() {
     const data = await api(`/api/incidents?${params}`);
     state.incidents = data.incidents;
     renderIncidents();
+    renderHistory();
   } catch (error) { showToast(error.message); }
 }
 
@@ -232,27 +245,94 @@ function renderSensitiveTypes(values) {
 
 function renderIncidents() {
   const body = byId("incident-rows");
-  byId("visible-count").textContent = state.incidents.length;
-  byId("empty-state").hidden = state.incidents.length > 0;
-  body.innerHTML = state.incidents.map((incident, index) => {
+  const activeIncidents = state.incidents.filter(i => !["Resolved", "Closed", "False Positive"].includes(incidentStatus(i.incident_status)));
+  byId("visible-count").textContent = activeIncidents.length;
+  byId("empty-state").hidden = activeIncidents.length > 0;
+  body.innerHTML = activeIncidents.map((incident, index) => {
     const score = Number(incident.risk_score || 0);
     const classification = incident.file_classification || "Public";
     const decision = incident.policy_decision || "Allow";
     const status = incidentStatus(incident.incident_status);
     const deviceEvent = incident.incident_type === "usb_device";
-    return `<tr data-index="${index}" tabindex="0">
+    return `<tr data-id="${escapeHtml(incident.incident_id)}" tabindex="0">
       <td><span class="primary-cell">${escapeHtml(formatDate(incident.event_time))}</span><span class="secondary-cell">${escapeHtml(incident.incident_id)}</span></td>
       <td><span class="primary-cell">${escapeHtml(incident.user_name)}</span><span class="secondary-cell">${escapeHtml(incident.device_name)}</span></td>
       <td><span class="primary-cell">${escapeHtml(deviceEvent ? "USB device insertion" : incident.file_name)}</span><span class="secondary-cell">${deviceEvent ? "Device authorization event" : `${incident.finding_count || 0} findings${incident.duplicate_incident_count ? ` | ${incident.duplicate_incident_count} duplicate` : ""}`}</span></td>
       <td><span class="badge badge-${classification.toLowerCase()}">${escapeHtml(classification)}</span></td>
       <td><div class="risk"><span>${score}</span><span class="risk-meter"><span style="width:${score}%;background:${riskColor(score)}"></span></span></div><span class="secondary-cell">${riskLevel(score)}</span></td>
-      <td><span class="badge decision-${decision.toLowerCase()}">${escapeHtml(decision)}</span></td>
       <td><span class="badge status-${statusClass(status)}">${escapeHtml(status)}</span></td>
       <td><span class="primary-cell">${escapeHtml(incident.assigned_to || "Unassigned")}</span></td>
+      <td class="action-cell">
+        <button type="button" class="button button-secondary alert-btn" onclick="event.stopPropagation(); showActionOptions(this, '${escapeHtml(incident.incident_id)}')">Alert</button>
+        <div class="action-options" hidden>
+            <button type="button" class="button decision-allow" onclick="event.stopPropagation(); enforceAction('${escapeHtml(incident.incident_id)}', 'allow')">Allow</button>
+            <button type="button" class="button decision-block" onclick="event.stopPropagation(); enforceAction('${escapeHtml(incident.incident_id)}', 'block')">Block</button>
+        </div>
+      </td>
     </tr>`;
   }).join("");
   body.querySelectorAll("tr").forEach((row) => {
-    const open = () => showIncident(state.incidents[Number(row.dataset.index)]);
+    const open = () => {
+      const inc = state.incidents.find(i => i.incident_id === row.dataset.id);
+      if(inc) showIncident(inc);
+    };
+    row.addEventListener("click", open);
+    row.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") open(); });
+  });
+}
+
+function showActionOptions(btn, incidentId) {
+    btn.hidden = true;
+    btn.nextElementSibling.hidden = false;
+}
+
+async function enforceAction(incidentId, action) {
+    try {
+        const updated = await api(`/api/incidents/${encodeURIComponent(incidentId)}/enforce`, {
+            method: "POST", body: JSON.stringify({ action })
+        });
+        const index = state.incidents.findIndex((item) => item.incident_id === incidentId);
+        if (index >= 0) state.incidents[index] = updated;
+        renderIncidents();
+        renderHistory();
+        showToast(`Incident enforced: ${action.toUpperCase()}`);
+    } catch(err) {
+        showToast(err.message);
+    }
+}
+
+function renderHistory() {
+  const body = byId("history-rows");
+  if (!body) return;
+  const historyIncidents = state.incidents.filter(i => ["Resolved", "Closed", "False Positive"].includes(incidentStatus(i.incident_status)));
+  byId("history-visible-count").textContent = historyIncidents.length;
+  byId("history-empty-state").hidden = historyIncidents.length > 0;
+  body.innerHTML = historyIncidents.map((incident, index) => {
+    const score = Number(incident.risk_score || 0);
+    const classification = incident.file_classification || "Public";
+    const decision = incident.policy_decision || "Allow";
+    const status = incidentStatus(incident.incident_status);
+    const deviceEvent = incident.incident_type === "usb_device";
+    const manualAction = incident.manual_action || decision;
+    return `<tr data-id="${escapeHtml(incident.incident_id)}" tabindex="0">
+      <td><span class="primary-cell">${escapeHtml(formatDate(incident.event_time))}</span><span class="secondary-cell">${escapeHtml(incident.incident_id)}</span></td>
+      <td><span class="primary-cell">${escapeHtml(incident.user_name)}</span><span class="secondary-cell">${escapeHtml(incident.device_name)}</span></td>
+      <td><span class="primary-cell">${escapeHtml(deviceEvent ? "USB device insertion" : incident.file_name)}</span><span class="secondary-cell">${deviceEvent ? "Device authorization event" : `${incident.finding_count || 0} findings${incident.duplicate_incident_count ? ` | ${incident.duplicate_incident_count} duplicate` : ""}`}</span></td>
+      <td><span class="badge badge-${classification.toLowerCase()}">${escapeHtml(classification)}</span></td>
+      <td><div class="risk"><span>${score}</span><span class="risk-meter"><span style="width:${score}%;background:${riskColor(score)}"></span></span></div><span class="secondary-cell">${riskLevel(score)}</span></td>
+      <td><span class="badge status-${statusClass(status)}">${escapeHtml(status)}</span></td>
+      <td><span class="primary-cell">${escapeHtml(incident.assigned_to || "Unassigned")}</span></td>
+      <td>
+        <span class="badge decision-${manualAction.toLowerCase()}">${escapeHtml(manualAction)}</span>
+        ${can("incidents.update") ? `<button class="table-button danger delete-incident-btn" style="margin-left:8px;" data-id="${escapeHtml(incident.incident_id)}" onclick="deleteIncident(event, this.dataset.id)">Delete</button>` : ""}
+      </td>
+    </tr>`;
+  }).join("");
+  body.querySelectorAll("tr").forEach((row) => {
+    const open = () => {
+      const inc = state.incidents.find(i => i.incident_id === row.dataset.id);
+      if(inc) showIncident(inc);
+    };
     row.addEventListener("click", open);
     row.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") open(); });
   });
@@ -707,7 +787,11 @@ function showToast(message) {
 
 function scheduleRefresh() {
   window.clearInterval(state.timer);
-  if (byId("auto-refresh").checked) state.timer = window.setInterval(() => { if (state.currentView === "overview") loadDashboard(false); if (state.currentView === "incidents") loadIncidents(); }, 10000);
+  if (byId("auto-refresh").checked) state.timer = window.setInterval(() => { 
+    if (document.querySelector('.action-options:not([hidden])')) return; 
+    if (state.currentView === "overview") loadDashboard(false); 
+    if (state.currentView === "incidents") loadIncidents(); 
+  }, 2000);
 }
 
 let filterTimer;

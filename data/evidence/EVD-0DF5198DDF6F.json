@@ -1,10 +1,10 @@
 {
-  "evidence_id": "EVD-54054D2A000A",
-  "incident_id": "INC-347C032B3DCB",
-  "collected_at": "2026-07-20T13:44:00.112768+00:00",
-  "retained_until": "2026-10-18T13:44:00.112768+00:00",
+  "evidence_id": "EVD-0DF5198DDF6F",
+  "incident_id": "INC-C99A1BAB3A9E",
+  "collected_at": "2026-07-22T08:15:59.717720+00:00",
+  "retained_until": "2026-10-20T08:15:59.717720+00:00",
   "file_name": "04_restricted_credentials.env",
-  "file_path": "C:\\Users\\M S I\\Desktop\\usb-operation-demo\\synthetic_test_data\\04_restricted_credentials.env",
+  "file_path": "D:\\04_restricted_credentials.env",
   "file_size": 202,
   "file_type": ".env",
   "file_hashes": {
@@ -12,18 +12,19 @@
     "sha1": "a26bbcb76c9cd70cc7c8d12e33f211be431b86a0",
     "md5": "39887cd5129f79873b57aa581252fae7"
   },
-  "usb_serial_number": "",
-  "usb_manufacturer": "",
-  "usb_device_name": "Synthetic Test USB",
+  "usb_serial_number": "4B875E91",
+  "usb_manufacturer": "(Standard disk drives)",
+  "usb_device_name": "Removable Disk D:",
   "username": "M S I",
   "computer_name": "DESKTOP-VKJ595B",
   "ip_addresses": [
+    "172.21.0.1",
     "172.23.160.1",
     "192.168.100.16",
-    "fe80::4cd0:1d21:96cb:9b0",
-    "fe80::ade7:6caa:7ff6:57b1"
+    "fe80::456f:5e46:e1dc:9485",
+    "fe80::4cd0:1d21:96cb:9b0"
   ],
-  "event_time": "2026-07-20T13:44:00.091787+00:00",
+  "event_time": "2026-07-22T08:15:59.699356+00:00",
   "sensitive_findings": [
     {
       "kind": "confidential_keyword",
@@ -75,7 +76,7 @@
   "encryption": "Windows DPAPI current-user",
   "protected_copy_preserved": true,
   "protected_copy_error": null,
-  "protected_copy_name": "EVD-54054D2A000A.dpapi",
-  "protected_copy_sha256": "659ca1810f5df94373897a352475631aca8b35a8d0d2ea18d3e4b6c91c8c59b1",
-  "manifest_sha256": "3ab264bb1ef75a926f518c265ff6670ea01a5c47c160fda3a0ea02b7f36db533"
+  "protected_copy_name": "EVD-0DF5198DDF6F.dpapi",
+  "protected_copy_sha256": "6a8683c657f54cb2d27662988c8d828ad4204a5c319e42adcf811b200c02914d",
+  "manifest_sha256": "41dc79f3f0c22687097e57e25d0d197b7e58ab8d0edacab43157296b9c095764"
 }
