@@ -257,7 +257,7 @@ function renderIncidents() {
     return `<tr data-id="${escapeHtml(incident.incident_id)}" tabindex="0">
       <td><span class="primary-cell">${escapeHtml(formatDate(incident.event_time))}</span><span class="secondary-cell">${escapeHtml(incident.incident_id)}</span></td>
       <td><span class="primary-cell">${escapeHtml(incident.user_name)}</span><span class="secondary-cell">${escapeHtml(incident.device_name)}</span></td>
-      <td><span class="primary-cell">${escapeHtml(deviceEvent ? "USB device insertion" : incident.file_name)}</span><span class="secondary-cell">${deviceEvent ? "Device authorization event" : `${incident.finding_count || 0} findings${incident.duplicate_incident_count ? ` | ${incident.duplicate_incident_count} duplicate` : ""}`}</span></td>
+      <td><span class="primary-cell">${escapeHtml(deviceEvent ? "USB device insertion" : incident.file_name)}</span><span class="secondary-cell">${deviceEvent ? "Device authorization event" : `${incident.finding_count || (Array.isArray(incident.sensitive_findings) ? incident.sensitive_findings.length : 0)} findings${incident.duplicate_incident_count ? ` | ${incident.duplicate_incident_count} duplicate` : ""}`}</span></td>
       <td><span class="badge badge-${classification.toLowerCase()}">${escapeHtml(classification)}</span></td>
       <td><div class="risk"><span>${score}</span><span class="risk-meter"><span style="width:${score}%;background:${riskColor(score)}"></span></span></div><span class="secondary-cell">${riskLevel(score)}</span></td>
       <td><span class="badge status-${statusClass(status)}">${escapeHtml(status)}</span></td>
@@ -317,7 +317,7 @@ function renderHistory() {
     return `<tr data-id="${escapeHtml(incident.incident_id)}" tabindex="0">
       <td><span class="primary-cell">${escapeHtml(formatDate(incident.event_time))}</span><span class="secondary-cell">${escapeHtml(incident.incident_id)}</span></td>
       <td><span class="primary-cell">${escapeHtml(incident.user_name)}</span><span class="secondary-cell">${escapeHtml(incident.device_name)}</span></td>
-      <td><span class="primary-cell">${escapeHtml(deviceEvent ? "USB device insertion" : incident.file_name)}</span><span class="secondary-cell">${deviceEvent ? "Device authorization event" : `${incident.finding_count || 0} findings${incident.duplicate_incident_count ? ` | ${incident.duplicate_incident_count} duplicate` : ""}`}</span></td>
+      <td><span class="primary-cell">${escapeHtml(deviceEvent ? "USB device insertion" : incident.file_name)}</span><span class="secondary-cell">${deviceEvent ? "Device authorization event" : `${incident.finding_count || (Array.isArray(incident.sensitive_findings) ? incident.sensitive_findings.length : 0)} findings${incident.duplicate_incident_count ? ` | ${incident.duplicate_incident_count} duplicate` : ""}`}</span></td>
       <td><span class="badge badge-${classification.toLowerCase()}">${escapeHtml(classification)}</span></td>
       <td><div class="risk"><span>${score}</span><span class="risk-meter"><span style="width:${score}%;background:${riskColor(score)}"></span></span></div><span class="secondary-cell">${riskLevel(score)}</span></td>
       <td><span class="badge status-${statusClass(status)}">${escapeHtml(status)}</span></td>

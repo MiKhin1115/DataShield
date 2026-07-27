@@ -18,7 +18,7 @@ This is the central Security Operations Center (SOC) where all alerts arrive.
 1. Open a PowerShell terminal in this folder.
 2. Run: `python -m dlp_agent dashboard`
 3. Open your browser and go to `http://127.0.0.1:8080`
-4. Log in using the admin credentials. (Check `users.json` for your specific username and password, typically `admin` / `admin_password`).
+4. Log in using the admin credentials. (The default credentials are `admin` / `Admin123!`).
 
 ### 2. Start the OS Background Monitor
 This is the invisible endpoint agent that monitors PowerShell and USB drives.

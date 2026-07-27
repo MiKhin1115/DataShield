@@ -1,0 +1,108 @@
+{
+  "evidence_id": "EVD-FA22DF98A662",
+  "incident_id": "INC-32FDC3B4377B",
+  "collected_at": "2026-07-27T12:35:25.132774+00:00",
+  "retained_until": "2026-10-25T12:35:25.132774+00:00",
+  "file_name": "abcd.txt",
+  "file_path": "D:\\abcd.txt",
+  "file_size": 339,
+  "file_type": ".txt",
+  "file_hashes": {
+    "sha256": "e686e4d95f863596354bd56661629db54a93a977dea474c9b8932c87e7e87fc5",
+    "sha1": "1ba300f8121330e8f46c8899e601826b3b240ff0",
+    "md5": "090f8e738016ae5a6f5f89c9a8c4fcf3"
+  },
+  "usb_serial_number": "4B875E91",
+  "usb_manufacturer": "(Standard disk drives)",
+  "usb_device_name": "Removable Disk D:",
+  "username": "M S I",
+  "computer_name": "DESKTOP-VKJ595B",
+  "ip_addresses": [
+    "100.74.247.184",
+    "172.23.160.1",
+    "192.168.100.146",
+    "fe80::456f:5e46:e1dc:9485",
+    "fe80::4cd0:1d21:96cb:9b0",
+    "fe80::e7ac:69cc:64cf:d3de"
+  ],
+  "event_time": "2026-07-27T12:35:25.113668+00:00",
+  "sensitive_findings": [
+    {
+      "kind": "confidential_keyword",
+      "match": "CONF...TIAL",
+      "position": 32,
+      "severity": "medium"
+    },
+    {
+      "kind": "email",
+      "match": "cust...test",
+      "position": 99,
+      "severity": "low"
+    },
+    {
+      "kind": "passport_number",
+      "match": "Pass...4567",
+      "position": 149,
+      "severity": "high"
+    },
+    {
+      "kind": "phone_number",
+      "match": "1234567",
+      "position": 161,
+      "severity": "medium"
+    },
+    {
+      "kind": "bank_account",
+      "match": "acco...9012",
+      "position": 175,
+      "severity": "high"
+    },
+    {
+      "kind": "phone_number",
+      "match": "1234...9012",
+      "position": 184,
+      "severity": "medium"
+    },
+    {
+      "kind": "email",
+      "match": "cust...test",
+      "position": 238,
+      "severity": "low"
+    },
+    {
+      "kind": "passport_number",
+      "match": "Pass...4321",
+      "position": 288,
+      "severity": "high"
+    },
+    {
+      "kind": "phone_number",
+      "match": "7654321",
+      "position": 300,
+      "severity": "medium"
+    },
+    {
+      "kind": "bank_account",
+      "match": "acco...1098",
+      "position": 314,
+      "severity": "high"
+    },
+    {
+      "kind": "phone_number",
+      "match": "9876...1098",
+      "position": 323,
+      "severity": "medium"
+    }
+  ],
+  "matched_policies": [
+    "Block restricted files",
+    "Block TXT on personal USB"
+  ],
+  "action_taken": "Block",
+  "encryption": "Windows DPAPI current-user",
+  "protected_copy_preserved": true,
+  "protected_copy_error": null,
+  "protected_copy_name": "EVD-FA22DF98A662.dpapi",
+  "protected_copy_sha256": "c7c2b5a3d31ffc80539a134bac99ec52bbb13219f03fe8f8e04da64ca4eb1edc",
+  "manifest_sha256": "e8c0fea536bc76db7b91e738d344e3ae19963ad6cbbbd96a2cab77b2512aadf4"
+}

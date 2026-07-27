@@ -427,11 +427,27 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self._audit_change(f"incident_manual_{action}", "incident", incident_id)
         self._serve_json(self._public_incident(updated))
 
+    _recent_browser_incidents: dict[str, float] = {}
+
     def _handle_browser_incident(self) -> None:
         body = self._json_body()
         file_name = str(body.get("file_name", "Unknown"))
+        if file_name in {"Raw Payload Data", "Unknown", "Unknown File"}:
+            self._serve_json({"status": "ignored"})
+            return
         target_url = str(body.get("url", "Unknown"))
+        import time
+        now_ts = time.time()
+        dedup_key = f"{file_name}::{target_url}"
+        if dedup_key in DashboardHandler._recent_browser_incidents:
+            if (now_ts - DashboardHandler._recent_browser_incidents[dedup_key]) < 5.0:
+                print(f"[DLP DASHBOARD] Skipping duplicate incident for {file_name} within 5s", flush=True)
+                self._serve_json({"status": "deduplicated"})
+                return
+        DashboardHandler._recent_browser_incidents[dedup_key] = now_ts
+
         action = str(body.get("action", "Blocked"))
+        print(f"[DLP DASHBOARD] New Browser Incident Received: file={file_name}, target={target_url}", flush=True)
         
         from uuid import uuid4
         from datetime import datetime, timezone
@@ -442,6 +458,60 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return datetime.now(timezone.utc).isoformat()
         import socket
         
+        from .sensitive_scanner import SensitiveDataScanner
+        from dataclasses import asdict
+        import os
+        
+        scanner = SensitiveDataScanner()
+        findings = []
+        sample_text = str(body.get("sample_text", ""))
+        if sample_text:
+            try:
+                findings = [asdict(f) for f in scanner.scan_text(sample_text)]
+            except Exception:
+                pass
+        
+        if not findings:
+            try:
+                for search_dir in ["synthetic_test_data", ".", os.path.expanduser("~/Desktop"), os.path.expanduser("~/Downloads")]:
+                    candidate = Path(search_dir) / file_name
+                    if candidate.exists() and candidate.is_file():
+                        res = scanner.scan_file(candidate)
+                        findings = [asdict(f) for f in res.findings]
+                        break
+            except Exception:
+                pass
+
+        from urllib.parse import urlparse
+        parsed_host = urlparse(target_url).hostname or ""
+        is_internal_url = (
+            parsed_host in {"localhost", "127.0.0.1", "::1"}
+            or parsed_host.startswith("192.168.")
+            or parsed_host.startswith("10.")
+            or (parsed_host.startswith("172.") and len(parsed_host.split(".")) == 4 and parsed_host.split(".")[1].isdigit() and 16 <= int(parsed_host.split(".")[1]) <= 31)
+        )
+        url_classification = "Internal" if is_internal_url else "External"
+
+        lower_url = target_url.lower()
+        if "drive.google" in lower_url or "google.com/drive" in lower_url:
+            app_name = "Google Drive"
+        elif "telegram" in lower_url:
+            app_name = "Telegram Web"
+        elif "gmail" in lower_url or "mail.google" in lower_url:
+            app_name = "Gmail"
+        elif "dropbox" in lower_url:
+            app_name = "Dropbox"
+        elif "onedrive" in lower_url or "sharepoint" in lower_url:
+            app_name = "Microsoft OneDrive"
+        elif "slack" in lower_url:
+            app_name = "Slack"
+        elif "whatsapp" in lower_url:
+            app_name = "WhatsApp Web"
+        elif parsed_host:
+            app_name = parsed_host
+        else:
+            app_name = "Enterprise Browser Extension"
+
         incident = {
             "incident_id": f"INC-{uuid4().hex[:12].upper()}",
             "incident_type": "network_exfiltration",
@@ -451,7 +521,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             "computer_name": socket.gethostname(),
             "ip_addresses": ["127.0.0.1"],
             "device_id": "BROWSER_EXT",
-            "device_name": "Enterprise Browser Extension",
+            "device_name": app_name,
             "usb_serial_number": "",
             "usb_manufacturer": "",
             "usb_model": "",
@@ -462,9 +532,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             "file_path": f"Target: {target_url}",
             "file_size": 0,
             "change_type": "browser_upload",
-            "sensitive_findings": [],
-            "file_classification": "Restricted",
-            "recommended_classification": "Restricted",
+            "finding_count": len(findings),
+            "sensitive_findings": findings,
+            "file_classification": url_classification,
+            "recommended_classification": url_classification,
             "risk_score": 95,
             "policy_decision": "Block",
             "action_taken": action,
@@ -613,9 +684,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def _json_body(self) -> dict[str, object]:
         try:
-            length = min(int(self.headers.get("Content-Length", "0")), 3_200_000)
-            value = json.loads(self.rfile.read(length) or b"{}")
-        except (ValueError, json.JSONDecodeError):
+            length = int(self.headers.get("Content-Length", "0"))
+            if length <= 0:
+                length = 65536
+            length = min(length, 3_200_000)
+            data = self.rfile.read(length)
+            value = json.loads(data.decode("utf-8", errors="ignore") or "{}")
+        except (ValueError, json.JSONDecodeError, Exception):
             return {}
         return value if isinstance(value, dict) else {}
 

@@ -1,0 +1,46 @@
+{
+  "evidence_id": "EVD-44713785B7BF",
+  "incident_id": "INC-6341C53AD57C",
+  "collected_at": "2026-07-27T15:38:54.118907+00:00",
+  "retained_until": "2026-10-25T15:38:54.118907+00:00",
+  "file_name": "efg.txt",
+  "file_path": "D:\\efg.txt",
+  "file_size": 36,
+  "file_type": ".txt",
+  "file_hashes": {
+    "sha256": "6d4e02f80971a813c9ac9fa88d8c0cbf7e990ba3b4b5ecd74dd529ba18acab23",
+    "sha1": "867eb945faf62f4089218761695d1c8ea5284f66",
+    "md5": "036f0804b5bd5e4d3fc6c4f49a37371e"
+  },
+  "usb_serial_number": "4B875E91",
+  "usb_manufacturer": "(Standard disk drives)",
+  "usb_device_name": "Removable Disk D:",
+  "username": "M S I",
+  "computer_name": "DESKTOP-VKJ595B",
+  "ip_addresses": [
+    "172.23.160.1",
+    "192.168.100.146",
+    "fe80::456f:5e46:e1dc:9485",
+    "fe80::4cd0:1d21:96cb:9b0"
+  ],
+  "event_time": "2026-07-27T15:38:54.101434+00:00",
+  "sensitive_findings": [
+    {
+      "kind": "api_key",
+      "match": "API_...iuhf",
+      "position": 0,
+      "severity": "critical"
+    }
+  ],
+  "matched_policies": [
+    "Block restricted files",
+    "Block TXT on personal USB"
+  ],
+  "action_taken": "Block",
+  "encryption": "Windows DPAPI current-user",
+  "protected_copy_preserved": true,
+  "protected_copy_error": null,
+  "protected_copy_name": "EVD-44713785B7BF.dpapi",
+  "protected_copy_sha256": "c6d97cbf010e5b2427009a2ee202a44d979dc7e81db06b07566207848f2d05b3",
+  "manifest_sha256": "d7c1dc37c97852aec69f491ad641d8fea84eb9459c66cb7bcb3f2f9068e03fd2"
+}

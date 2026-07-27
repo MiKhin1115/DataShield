@@ -1,0 +1,40 @@
+{
+  "evidence_id": "EVD-87BF8AF48877",
+  "incident_id": "INC-99E4DCF0A1A0",
+  "collected_at": "2026-07-27T12:34:49.102442+00:00",
+  "retained_until": "2026-10-25T12:34:49.102442+00:00",
+  "file_name": "abcd.txt",
+  "file_path": "D:\\abcd.txt",
+  "file_size": 25,
+  "file_type": ".txt",
+  "file_hashes": {
+    "sha256": "d32d7956fc8df66f33b076f0f8cfcc8a2259c37c1745b55029d45aa955ba2196",
+    "sha1": "5cb6e21d5bce668c8ee83ccd4139d86b30ba08b1",
+    "md5": "b29a5f7494203b14ed0f5371afd00916"
+  },
+  "usb_serial_number": "4B875E91",
+  "usb_manufacturer": "(Standard disk drives)",
+  "usb_device_name": "Removable Disk D:",
+  "username": "M S I",
+  "computer_name": "DESKTOP-VKJ595B",
+  "ip_addresses": [
+    "100.74.247.184",
+    "172.23.160.1",
+    "192.168.100.146",
+    "fe80::456f:5e46:e1dc:9485",
+    "fe80::4cd0:1d21:96cb:9b0",
+    "fe80::e7ac:69cc:64cf:d3de"
+  ],
+  "event_time": "2026-07-27T12:34:49.083813+00:00",
+  "sensitive_findings": [],
+  "matched_policies": [
+    "Block TXT on personal USB"
+  ],
+  "action_taken": "Block",
+  "encryption": "Windows DPAPI current-user",
+  "protected_copy_preserved": true,
+  "protected_copy_error": null,
+  "protected_copy_name": "EVD-87BF8AF48877.dpapi",
+  "protected_copy_sha256": "b6d498af60ece5c740bced1e7b29088274339ef62c97b4d80580e93773c1d36c",
+  "manifest_sha256": "32c0b94f8bfb1e9844b60f02d2b7f02d64fb637da5d112c93747801a11bb422c"
+}

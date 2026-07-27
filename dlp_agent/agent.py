@@ -285,9 +285,6 @@ class UsbDlpAgent:
 
     def process_device_insertion(self, device: UsbDevice) -> dict[str, object] | None:
         usb_status = self._authorization_status(device)
-        if usb_status == "authorized":
-            return None
-
         event_time = self.device_inserted_at.get(device.device_id, utc_now_iso())
         device_id = self._authorization_id(device)
         user_name = getpass.getuser()
@@ -333,12 +330,12 @@ class UsbDlpAgent:
             policy_id = "USB-DEVICE-BLOCK"
             reason = f"USB device is explicitly {usb_status}"
         else:
-            action_taken = "Alert - device monitored pending authorization"
-            risk_score = 50
-            classification = "Internal"
-            decision = "Alert"
-            policy_id = "USB-DEVICE-UNKNOWN"
-            reason = "USB device is not present in the authorization list"
+            action_taken = "Informational - USB device inserted (Monitored)"
+            risk_score = 10
+            classification = "Informational"
+            decision = "Allow"
+            policy_id = "USB-INFO-001"
+            reason = "USB device insertion detected - Informational event (not a serious threat)"
             timeline.append(
                 self._timeline_event(
                     "unknown_device_alert",
@@ -443,8 +440,7 @@ class UsbDlpAgent:
         computer_name, ip_addresses = system_context()
         
         ip = event.remote_address
-        is_internal = ip.startswith("192.168.") or ip.startswith("10.") or \
-                      (ip.startswith("172.") and 16 <= int(ip.split(".")[1]) <= 31)
+        is_internal = ip.startswith("192.168.") or ip.startswith("10.") or (ip.startswith("172.") and 16 <= int(ip.split(".")[1]) <= 31)
         
         ip_classification = "Internal" if is_internal else "External"
         
@@ -523,8 +519,8 @@ class UsbDlpAgent:
             "file_hashes": {},
             "hash_error": None,
             "duplicate_incident_count": 0,
-            "file_classification": assessment.file_classification,
-            "recommended_classification": assessment.file_classification,
+            "file_classification": ip_classification,
+            "recommended_classification": ip_classification,
             "risk_score": risk_score,
             "policy_decision": policy_decision,
             "action_taken": action_desc,

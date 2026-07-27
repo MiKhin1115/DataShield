@@ -291,10 +291,10 @@ tbody tr:hover { background: rgba(37, 99, 235, 0.03); }
 .risk-meter span { height: 100%; display: block; border-radius: 3px; }
 
 .badge { min-height: 26px; width: fit-content; padding: 4px 10px; display: inline-flex; align-items: center; border-radius: 20px; font-size: 12px; font-weight: 600; white-space: nowrap; }
-.badge-public, .decision-allow, .status-resolved, .status-closed { background: var(--green-soft); color: var(--green); border: 1px solid rgba(5, 150, 105, 0.2); }
+.badge-informational, .badge-public, .decision-allow, .status-resolved, .status-closed { background: var(--green-soft); color: var(--green); border: 1px solid rgba(5, 150, 105, 0.2); }
 .badge-internal, .status-open, .status-new { background: var(--blue-soft); color: var(--blue-dark); border: 1px solid rgba(37, 99, 235, 0.2); }
 .badge-confidential, .decision-alert, .status-investigating, .status-pending-user-confirmation, .status-pending-manager-approval { background: var(--amber-soft); color: var(--amber); border: 1px solid rgba(217, 119, 6, 0.2); }
-.badge-restricted, .decision-block, .status-escalated { background: var(--red-soft); color: var(--red); border: 1px solid rgba(220, 38, 38, 0.2); }
+.badge-external, .badge-restricted, .decision-block, .status-escalated { background: var(--red-soft); color: var(--red); border: 1px solid rgba(220, 38, 38, 0.2); }
 .status-false-positive { background: rgba(15, 23, 42, 0.05); color: var(--ink-soft); border: 1px solid var(--line); }
 
 .empty-state { min-height: 240px; padding: 40px; display: grid; place-content: center; text-align: center; color: var(--muted); }
