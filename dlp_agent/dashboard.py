@@ -4,6 +4,11 @@ import csv
 import io
 import json
 import mimetypes
+import os
+import tempfile
+import threading
+from dataclasses import asdict
+from datetime import datetime, timezone
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,10 +27,12 @@ from .audit_log import AuditLog
 from .evidence_vault import EvidenceVault
 from .incident_store import IncidentStore
 from .incident_workflow import CaseAttachmentStore, IncidentWorkflowService
+from .policy import PolicyEngine
 from .policy_store import PolicyStore
+from .process_enforcer import ProcessActionResult, resume_process, terminate_process_tree
 from .rbac import ROLES, SessionManager, UserStore, has_permission
+from .sensitive_scanner import SensitiveDataScanner, SensitiveFinding
 from .usb_registry import UsbRegistry
-
 
 ASSET_DIRECTORY = Path(__file__).with_name("dashboard_assets")
 
@@ -53,6 +60,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     "permissions": sorted(ROLES.get(str(user.get("role")), set())) if user else [],
                 }
             )
+            return
+        if parsed.path == "/api/browser_commands":
+            self._serve_browser_commands(parse_qs(parsed.query))
             return
         if parsed.path == "/api/incidents":
             if self._require("incidents.view"):
@@ -119,7 +129,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.OK)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-File-Name")
         self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("Access-Control-Max-Age", "86400")
         self.end_headers()
@@ -135,6 +145,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/browser_incident":
             self._handle_browser_incident()
+            return
+        if parsed.path == "/api/scan_file":
+            self._handle_scan_file()
             return
         if parsed.path == "/api/policies":
             if self._require_mutation("policies.manage"):
@@ -382,43 +395,112 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def _enforce_incident(self, incident_id: str) -> None:
         body = self._json_body()
         action = str(body.get("action", ""))
+        if action not in {"allow", "block"}:
+            self._serve_json({"error": "Action must be allow or block"}, HTTPStatus.BAD_REQUEST)
+            return
         
         incident = self.store.get(incident_id)
         if not incident:
             self._serve_json({"error": "Incident not found"}, HTTPStatus.NOT_FOUND)
             return
         
-        if action == "block":
-            if incident.get("incident_type") == "network_exfiltration":
-                import psutil
-                from .firewall_enforcer import block_ip_firewall
-                
-                remote_ip = incident.get("remote_ip")
-                if remote_ip:
-                    block_ip_firewall(str(remote_ip))
-                    
-                pid = incident.get("process_pid")
-                if pid:
-                    try:
-                        psutil.Process(int(pid)).terminate()
-                    except (ValueError, psutil.NoSuchProcess, psutil.AccessDenied, TypeError):
-                        pass
-                
-                if incident.get("device_id") == "BROWSER_EXT":
-                    for proc in psutil.process_iter(['name']):
-                        if proc.info['name'] in ['chrome.exe']:
-                            try:
-                                proc.kill()
-                            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                                pass
+        action_message = "Allowed by SOC"
+        enforcement_state = str(incident.get("enforcement_state", "observed"))
+        timeline = list(incident.get("timeline", []))
+        if incident.get("incident_type") == "network_exfiltration" and incident.get("device_id") != "BROWSER_EXT":
+            pid = incident.get("process_pid")
+            process_name = str(incident.get("process_name", ""))
+            create_time = incident.get("process_create_time")
+            try:
+                parsed_pid = int(pid)
+                parsed_create_time = float(create_time) if create_time is not None else None
+            except (TypeError, ValueError):
+                result = ProcessActionResult(
+                    False,
+                    "identity_missing",
+                    "Process identity metadata is missing; no process was changed",
+                )
             else:
+                if action == "block":
+                    result = terminate_process_tree(
+                        parsed_pid,
+                        process_name,
+                        parsed_create_time,
+                    )
+                elif enforcement_state == "suspended":
+                    result = resume_process(
+                        parsed_pid,
+                        process_name,
+                        parsed_create_time,
+                    )
+                else:
+                    result = ProcessActionResult(
+                        True,
+                        "allowed",
+                        f"{process_name} (PID {parsed_pid}) allowed by SOC",
+                    )
+            action_message = result.message
+            enforcement_state = result.state
+            timeline.append(
+                {
+                    "time": datetime.now(timezone.utc).isoformat(),
+                    "event_type": "soc_enforcement",
+                    "description": f"SOC selected {action.title()}",
+                    "details": result.message,
+                }
+            )
+        elif incident.get("device_id") == "BROWSER_EXT":
+            client_id = str(incident.get("browser_client_id", ""))
+            command_queued = bool(client_id)
+            if command_queued:
+                self._queue_browser_command(
+                    client_id,
+                    {
+                        "command_id": f"{incident_id}-{len(timeline) + 1}",
+                        "incident_id": incident_id,
+                        "action": action,
+                        "browser_tab_id": incident.get("browser_tab_id"),
+                        "browser_window_id": incident.get("browser_window_id"),
+                    },
+                )
+            if action == "block":
+                action_message = (
+                    "Browser close requested by SOC"
+                    if command_queued
+                    else "Block recorded; browser link unavailable for this older incident"
+                )
+                enforcement_state = "close_requested" if command_queued else "blocked"
+            else:
+                action_message = "Browser upload allowed by SOC"
+                enforcement_state = "allowed"
+            timeline.append(
+                {
+                    "time": datetime.now(timezone.utc).isoformat(),
+                    "event_type": "soc_enforcement",
+                    "description": f"SOC selected {action.title()}",
+                    "details": action_message,
+                }
+            )
+        elif action == "block" and incident.get("incident_type") != "network_exfiltration":
+            try:
                 drive = str(incident.get("drive", ""))
                 if drive:
                     from .usb_enforcement import WindowsUsbEnforcer
                     enforcer = WindowsUsbEnforcer()
                     enforcer.wipe_and_block(drive)
-        
-        changes = {"manual_action": action, "incident_status": "Closed" if action == "allow" else "Resolved"}
+                    action_message = "USB device blocked by SOC"
+                    enforcement_state = "blocked"
+            except OSError as exc:
+                action_message = f"USB block failed: {exc}"
+                enforcement_state = "block_failed"
+
+        changes = {
+            "manual_action": action,
+            "incident_status": "Closed" if action == "allow" else "Resolved",
+            "action_taken": action_message,
+            "enforcement_state": enforcement_state,
+            "timeline": timeline,
+        }
         updated = self.store.update(incident_id, changes)
         if updated is None:
             self._serve_json({"error": "Failed to update"}, HTTPStatus.INTERNAL_SERVER_ERROR)
@@ -428,6 +510,28 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self._serve_json(self._public_incident(updated))
 
     _recent_browser_incidents: dict[str, float] = {}
+    _browser_commands: dict[str, list[dict[str, object]]] = {}
+    _browser_commands_lock = threading.Lock()
+
+    def _queue_browser_command(
+        self,
+        client_id: str,
+        command: dict[str, object],
+    ) -> None:
+        with DashboardHandler._browser_commands_lock:
+            DashboardHandler._browser_commands.setdefault(client_id, []).append(command)
+
+    def _serve_browser_commands(self, query: dict[str, list[str]]) -> None:
+        client_id = str(query.get("client_id", [""])[0])[:128]
+        if not client_id:
+            self._serve_json(
+                {"error": "client_id is required"},
+                HTTPStatus.BAD_REQUEST,
+            )
+            return
+        with DashboardHandler._browser_commands_lock:
+            commands = DashboardHandler._browser_commands.pop(client_id, [])
+        self._serve_json({"commands": commands})
 
     def _handle_browser_incident(self) -> None:
         body = self._json_body()
@@ -446,44 +550,65 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
         DashboardHandler._recent_browser_incidents[dedup_key] = now_ts
 
-        action = str(body.get("action", "Blocked"))
+        action = str(body.get("action", "Blocked by Enterprise Browser Extension"))
+        browser_client_id = str(body.get("browser_client_id", ""))[:128]
+
+        def browser_identifier(name: str) -> int | None:
+            try:
+                value = int(body.get(name))
+            except (TypeError, ValueError):
+                return None
+            return value if value >= 0 else None
+
+        browser_tab_id = browser_identifier("browser_tab_id")
+        browser_window_id = browser_identifier("browser_window_id")
         print(f"[DLP DASHBOARD] New Browser Incident Received: file={file_name}, target={target_url}", flush=True)
         
         from uuid import uuid4
-        from datetime import datetime, timezone
         import getpass
         import socket
         
         def utc_now_iso() -> str:
             return datetime.now(timezone.utc).isoformat()
-        import socket
-        
-        from .sensitive_scanner import SensitiveDataScanner
-        from dataclasses import asdict
-        import os
         
         scanner = SensitiveDataScanner()
-        findings = []
+        findings: list[dict[str, object]] = []
+        supplied_findings = body.get("sensitive_findings", [])
+        if isinstance(supplied_findings, list):
+            for item in supplied_findings:
+                if not isinstance(item, dict):
+                    continue
+                kind = str(item.get("kind", "unknown"))[:80]
+                severity = str(item.get("severity", "medium")).lower()
+                if severity not in {"low", "medium", "high", "critical"}:
+                    severity = "medium"
+                try:
+                    position = max(0, int(item.get("position", 0)))
+                except (TypeError, ValueError):
+                    position = 0
+                findings.append(
+                    {
+                        "kind": kind,
+                        "match": str(item.get("match", "detected"))[:120],
+                        "position": position,
+                        "severity": severity,
+                    }
+                )
         sample_text = str(body.get("sample_text", ""))
-        if sample_text:
+        if not findings and sample_text:
             try:
                 findings = [asdict(f) for f in scanner.scan_text(sample_text)]
             except Exception:
                 pass
-        
+
         if not findings:
             try:
-                for search_dir in ["synthetic_test_data", ".", os.path.expanduser("~/Desktop"), os.path.expanduser("~/Downloads")]:
-                    candidate = Path(search_dir) / file_name
-                    if candidate.exists() and candidate.is_file():
-                        res = scanner.scan_file(candidate)
-                        findings = [asdict(f) for f in res.findings]
-                        break
+                findings = [asdict(f) for f in scanner.scan_text(file_name)]
             except Exception:
                 pass
 
-        from urllib.parse import urlparse
-        parsed_host = urlparse(target_url).hostname or ""
+        parsed_target = urlparse(target_url)
+        parsed_host = parsed_target.hostname or ""
         is_internal_url = (
             parsed_host in {"localhost", "127.0.0.1", "::1"}
             or parsed_host.startswith("192.168.")
@@ -512,8 +637,152 @@ class DashboardHandler(BaseHTTPRequestHandler):
         else:
             app_name = "Enterprise Browser Extension"
 
+        known_browser_channels = {
+            "Google Drive": "Google Drive",
+            "Telegram Web": "Telegram",
+            "Gmail": "Gmail",
+            "Dropbox": "Dropbox",
+            "Microsoft OneDrive": "Microsoft OneDrive",
+            "Slack": "Slack",
+            "WhatsApp Web": "WhatsApp",
+        }
+        channel = known_browser_channels.get(app_name, "Web Upload")
+        try:
+            target_port = parsed_target.port
+        except ValueError:
+            target_port = None
+        if parsed_host:
+            destination = f"{parsed_host}:{target_port}" if target_port else parsed_host
+        else:
+            destination = target_url
+
+        scan_error = str(body.get("scan_error", ""))[:300] or None
+        supplied_blocked = body.get("blocked")
+        action_indicates_block = action.casefold().startswith("blocked")
+        blocked = bool(findings or scan_error or action_indicates_block)
+        if isinstance(supplied_blocked, bool):
+            blocked = blocked or supplied_blocked
+
+        assessment_findings = [
+            SensitiveFinding(
+                kind=str(item.get("kind", "unknown")),
+                match=str(item.get("match", "detected")),
+                position=int(item.get("position", 0)),
+                severity=str(item.get("severity", "medium")),
+            )
+            for item in findings
+        ]
+        assessment = PolicyEngine().assess(assessment_findings, scan_error)
+        # Internal/External describes the destination scope, not data sensitivity.
+        # Browser file classifications intentionally use only data-based labels.
+        if findings:
+            content_classification = (
+                "Confidential"
+                if assessment.file_classification == "Internal"
+                else assessment.file_classification
+            )
+        elif blocked:
+            content_classification = "Restricted"
+        else:
+            content_classification = "Public"
+
+        supplied_risk = body.get("risk_score")
+        try:
+            risk_score = int(supplied_risk) if supplied_risk is not None else assessment.risk_score
+        except (TypeError, ValueError):
+            risk_score = assessment.risk_score
+        risk_score = max(0, min(100, risk_score))
+        if blocked and not findings:
+            risk_score = max(risk_score, 75)
+        policy_decision = "Block" if blocked else "Allow"
+        finding_types = sorted({str(item.get("kind", "unknown")) for item in findings})
+        policy_reasons = [
+            "Browser upload inspected and blocked"
+            if blocked
+            else "Browser upload inspected and allowed; no sensitive data was detected"
+        ]
+        if finding_types:
+            policy_reasons.append(f"Sensitive data detected: {', '.join(finding_types)}")
+        if scan_error:
+            policy_reasons.append("Deep content inspection could not complete safely")
+
+        incident_id = f"INC-{uuid4().hex[:12].upper()}"
+
+        def timeline_event(event_type: str, description: str, details: str) -> dict[str, str]:
+            return {
+                "time": utc_now_iso(),
+                "event_type": event_type,
+                "description": description,
+                "details": details,
+            }
+
+        scan_details = (
+            f"Detected {len(findings)} finding(s): {', '.join(finding_types)}. "
+            f"Content classified as {content_classification}."
+            if finding_types
+            else (
+                f"Inspection could not complete safely: {scan_error}"
+                if scan_error
+                else f"No scanner finding metadata was available. Content classified as {content_classification}."
+            )
+        )
+        if blocked:
+            enforcement_description = (
+                "Google Drive rejected the upload"
+                if action == "Blocked by Google Drive security"
+                else "Browser upload blocked"
+            )
+            enforcement_details = f"{action}. Transfer of {file_name} to {destination} did not proceed."
+            enforcement_event_type = "upload_blocked"
+        else:
+            enforcement_description = "Browser upload allowed"
+            enforcement_details = f"{action}. Transfer of {file_name} to {destination} was permitted."
+            enforcement_event_type = "upload_allowed"
+        upload_description = (
+            "Browser file upload attempt detected"
+            if channel == "Web Upload"
+            else f"{channel} upload attempt detected"
+        )
+        timeline = [
+            timeline_event(
+                "upload_detected",
+                upload_description,
+                f"User selected {file_name} for transfer through {channel}.",
+            ),
+            timeline_event(
+                "destination_identified",
+                "Upload destination identified",
+                f"Target {destination} classified as {url_classification}.",
+            ),
+            timeline_event(
+                "scan_started",
+                "Sensitive data scan started",
+                f"Deep content inspection started for {file_name}.",
+            ),
+            timeline_event(
+                "scan_completed",
+                "Sensitive data scan completed" if not scan_error else "Sensitive data scan failed safely",
+                scan_details,
+            ),
+            timeline_event(
+                "policy_decision",
+                f"Policy action selected: {policy_decision}",
+                f"HTTPS Payload Inspection assigned risk {risk_score}/100 and {content_classification} classification.",
+            ),
+            timeline_event(
+                enforcement_event_type,
+                enforcement_description,
+                enforcement_details,
+            ),
+            timeline_event(
+                "soc_alert",
+                "SOC dashboard alert generated",
+                f"Incident {incident_id} opened for analyst review.",
+            ),
+        ]
+
         incident = {
-            "incident_id": f"INC-{uuid4().hex[:12].upper()}",
+            "incident_id": incident_id,
             "incident_type": "network_exfiltration",
             "event_time": utc_now_iso(),
             "user_name": getpass.getuser(),
@@ -522,6 +791,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
             "ip_addresses": ["127.0.0.1"],
             "device_id": "BROWSER_EXT",
             "device_name": app_name,
+            "browser_client_id": browser_client_id,
+            "browser_tab_id": browser_tab_id,
+            "browser_window_id": browser_window_id,
             "usb_serial_number": "",
             "usb_manufacturer": "",
             "usb_model": "",
@@ -530,31 +802,92 @@ class DashboardHandler(BaseHTTPRequestHandler):
             "file_name": file_name,
             "file_type": "Data Payload",
             "file_path": f"Target: {target_url}",
+            "channel": channel,
+            "destination": destination,
+            "destination_url": target_url,
             "file_size": 0,
             "change_type": "browser_upload",
             "finding_count": len(findings),
             "sensitive_findings": findings,
-            "file_classification": url_classification,
-            "recommended_classification": url_classification,
-            "risk_score": 95,
-            "policy_decision": "Block",
+            "scan_readable": scan_error is None,
+            "scan_error": scan_error,
+            "file_classification": content_classification,
+            "recommended_classification": content_classification,
+            "destination_classification": url_classification,
+            "destination_scope": url_classification,
+            "risk_score": risk_score,
+            "policy_decision": policy_decision,
             "action_taken": action,
-            "policy_reasons": ["Browser Extension detected sensitive payload upload over HTTPS"],
+            "policy_reasons": policy_reasons,
             "matched_policy_ids": ["EXT-HTTPS-001"],
             "matched_policy_names": ["HTTPS Payload Inspection"],
             "manual_action": "",
             "incident_status": "Open",
-            "timeline": [
-                {
-                    "time": utc_now_iso(),
-                    "event_type": "HTTPS Inspection",
-                    "description": f"Browser extension intercepted upload to {target_url}",
-                    "details": f"Payload contained sensitive data. Upload blocked natively in browser."
-                }
-            ]
+            "timeline": timeline,
         }
         self.store.append(incident)
-        self._serve_json({"status": "ok"})
+        self._serve_json({"status": "ok", "incident_id": incident_id})
+
+    def _handle_scan_file(self) -> None:
+        file_name = unquote(self.headers.get("X-File-Name", "unknown"))
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+        except (TypeError, ValueError):
+            self._serve_json(
+                {"blocked": True, "error": "invalid content length"},
+                HTTPStatus.BAD_REQUEST,
+            )
+            return
+        if content_length < 0:
+            self._serve_json(
+                {"blocked": True, "error": "invalid content length"},
+                HTTPStatus.BAD_REQUEST,
+            )
+            return
+        if content_length > 10 * 1024 * 1024:
+            self._serve_json(
+                {"blocked": True, "error": "file is too large to inspect safely"},
+                HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+            )
+            return
+
+        file_data = self.rfile.read(content_length)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file_name).suffix) as tmp:
+            tmp.write(file_data)
+            tmp_path = tmp.name
+
+        try:
+            scanner = SensitiveDataScanner()
+            scan_result = scanner.scan_file(Path(tmp_path), display_name=file_name)
+            assessment = PolicyEngine().assess(scan_result.findings, scan_result.error)
+            blocked = bool(scan_result.findings or scan_result.error)
+            classification = (
+                "Confidential"
+                if assessment.file_classification == "Internal"
+                else assessment.file_classification
+            )
+            details = ", ".join(
+                sorted({finding.kind for finding in scan_result.findings})
+            )
+            self._serve_json(
+                {
+                    "blocked": blocked,
+                    "details": details,
+                    "finding_count": len(scan_result.findings),
+                    "findings": [asdict(finding) for finding in scan_result.findings],
+                    "classification": classification,
+                    "risk_score": assessment.risk_score,
+                    "error": scan_result.error,
+                }
+            )
+        except Exception as exc:
+            # The browser must not treat an inspection failure as a clean result.
+            self._serve_json({"blocked": True, "error": str(exc)})
+        finally:
+            try:
+                os.remove(tmp_path)
+            except FileNotFoundError:
+                pass
 
     def _serve_incidents(self, query: dict[str, list[str]]) -> None:
         try:
@@ -754,7 +1087,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-File-Name")
         self.send_header("Access-Control-Allow-Private-Network", "true")
         for name, header_value in (headers or {}).items():
             self.send_header(name, header_value)

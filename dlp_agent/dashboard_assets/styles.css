@@ -509,16 +509,15 @@ dialog::backdrop { background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px)
   #incident-rows { display: grid; gap: 12px; }
   #incident-rows tr { padding: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-solid); }
   #incident-rows td { min-width: 0; min-height: 0; padding: 0; display: block; border: 0; }
-  #incident-rows td:nth-child(3), #incident-rows td:nth-child(7), #incident-rows td:nth-child(8) { grid-column: 1 / -1; }
+  #incident-rows td:nth-child(3), #incident-rows td:nth-child(6), #incident-rows td:nth-child(7) { grid-column: 1 / -1; }
   #incident-rows td::before { margin-bottom: 6px; display: block; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; }
   #incident-rows td:nth-child(1)::before { content: "Time"; }
   #incident-rows td:nth-child(2)::before { content: "User and device"; }
   #incident-rows td:nth-child(3)::before { content: "File"; }
   #incident-rows td:nth-child(4)::before { content: "Classification"; }
-  #incident-rows td:nth-child(5)::before { content: "Risk"; }
-  #incident-rows td:nth-child(6)::before { content: "Action"; }
-  #incident-rows td:nth-child(7)::before { content: "Status"; }
-  #incident-rows td:nth-child(8)::before { content: "Assigned analyst"; }
+  #incident-rows td:nth-child(5)::before { content: "Channel"; }
+  #incident-rows td:nth-child(6)::before { content: "Destination"; }
+  #incident-rows td:nth-child(7)::before { content: "Action"; }
   #incident-rows .primary-cell { max-width: 100%; }
   dialog, dialog.wide-dialog { width: calc(100% - 24px); max-height: 94vh; }
   .dialog-heading { min-height: 70px; padding: 16px 20px; }

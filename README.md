@@ -30,8 +30,12 @@ dashboard are added.
 ## Run
 
 ```powershell
-python -m dlp_agent run --interval 2
+python -m dlp_agent monitor --interval 0.5
 ```
+
+Sensitive PowerShell transfers using commands such as `Invoke-WebRequest -InFile`
+are suspended pending an SOC decision. Selecting **Block** in the dashboard terminates
+only the verified originating process tree; selecting **Allow** resumes it.
 
 High-risk and blocked events preserve evidence metadata and, by default, an encrypted
 copy of files up to 25 MB in `data/evidence`. Windows Data Protection API (DPAPI)

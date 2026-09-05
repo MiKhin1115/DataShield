@@ -70,6 +70,48 @@ function statusClass(value) {
   return incidentStatus(value).toLowerCase().replaceAll(" ", "-");
 }
 
+function incidentChannel(incident) {
+  if (incident.channel) return String(incident.channel);
+  const processName = String(incident.process_name || "").toLowerCase();
+  if (processName.includes("powershell") || processName === "pwsh.exe") return "PowerShell";
+  if (processName === "cmd.exe") return "Command Prompt";
+
+  const application = String(incident.device_name || "");
+  const applicationLower = application.toLowerCase();
+  if (applicationLower.includes("google drive")) return "Google Drive";
+  if (applicationLower.includes("telegram")) return "Telegram";
+  if (applicationLower.includes("gmail")) return "Gmail";
+  if (applicationLower.includes("outlook")) return "Outlook Email";
+  if (applicationLower.includes("onedrive")) return "Microsoft OneDrive";
+  if (applicationLower.includes("dropbox")) return "Dropbox";
+  if (incident.device_id === "BROWSER_EXT" || incident.change_type === "browser_upload") return "Web Upload";
+  if (incident.incident_type === "network_exfiltration") return "Network Transfer";
+  if (incident.drive || String(incident.device_id || "").toUpperCase() !== "NETWORK") return "USB";
+  return "Unknown";
+}
+
+function incidentDestination(incident) {
+  if (incident.destination) return String(incident.destination);
+  const recipient = incident.email_recipient || incident.recipient || incident.to_address;
+  if (recipient) return String(recipient);
+  if (incident.remote_ip) {
+    return incident.remote_port ? `${incident.remote_ip}:${incident.remote_port}` : String(incident.remote_ip);
+  }
+
+  const targetValue = String(incident.target_url || incident.file_path || "").replace(/^Target:\s*/i, "");
+  if (/^https?:\/\//i.test(targetValue)) {
+    try {
+      const target = new URL(targetValue);
+      return target.hostname || targetValue;
+    } catch (_) {
+      return targetValue;
+    }
+  }
+  if (incident.drive) return String(incident.drive);
+  if (incident.incident_type === "usb_device") return String(incident.device_name || "USB device");
+  return "Not recorded";
+}
+
 function isoDateValue(id) {
   const value = byId(id).value;
   if (!value) return "";
@@ -249,21 +291,20 @@ function renderIncidents() {
   byId("visible-count").textContent = activeIncidents.length;
   byId("empty-state").hidden = activeIncidents.length > 0;
   body.innerHTML = activeIncidents.map((incident, index) => {
-    const score = Number(incident.risk_score || 0);
     const classification = incident.file_classification || "Public";
     const decision = incident.policy_decision || "Allow";
-    const status = incidentStatus(incident.incident_status);
     const deviceEvent = incident.incident_type === "usb_device";
+    const channel = incidentChannel(incident);
+    const destination = incidentDestination(incident);
     return `<tr data-id="${escapeHtml(incident.incident_id)}" tabindex="0">
       <td><span class="primary-cell">${escapeHtml(formatDate(incident.event_time))}</span><span class="secondary-cell">${escapeHtml(incident.incident_id)}</span></td>
       <td><span class="primary-cell">${escapeHtml(incident.user_name)}</span><span class="secondary-cell">${escapeHtml(incident.device_name)}</span></td>
       <td><span class="primary-cell">${escapeHtml(deviceEvent ? "USB device insertion" : incident.file_name)}</span><span class="secondary-cell">${deviceEvent ? "Device authorization event" : `${incident.finding_count || (Array.isArray(incident.sensitive_findings) ? incident.sensitive_findings.length : 0)} findings${incident.duplicate_incident_count ? ` | ${incident.duplicate_incident_count} duplicate` : ""}`}</span></td>
       <td><span class="badge badge-${classification.toLowerCase()}">${escapeHtml(classification)}</span></td>
-      <td><div class="risk"><span>${score}</span><span class="risk-meter"><span style="width:${score}%;background:${riskColor(score)}"></span></span></div><span class="secondary-cell">${riskLevel(score)}</span></td>
-      <td><span class="badge status-${statusClass(status)}">${escapeHtml(status)}</span></td>
-      <td><span class="primary-cell">${escapeHtml(incident.assigned_to || "Unassigned")}</span></td>
+      <td><span class="primary-cell">${escapeHtml(channel)}</span><span class="secondary-cell">${escapeHtml(incident.process_name || incident.change_type || "Transfer method")}</span></td>
+      <td><span class="primary-cell">${escapeHtml(destination)}</span><span class="secondary-cell">${escapeHtml(incident.destination_classification || "")}</span></td>
       <td class="action-cell">
-        <button type="button" class="button button-secondary alert-btn" onclick="event.stopPropagation(); showActionOptions(this, '${escapeHtml(incident.incident_id)}')">Alert</button>
+        <button type="button" class="button button-secondary alert-btn" onclick="event.stopPropagation(); handlePrimaryAction(this, '${escapeHtml(incident.incident_id)}', '${escapeHtml(decision)}')">${escapeHtml(decision)}</button>
         <div class="action-options" hidden>
             <button type="button" class="button decision-allow" onclick="event.stopPropagation(); enforceAction('${escapeHtml(incident.incident_id)}', 'allow')">Allow</button>
             <button type="button" class="button decision-block" onclick="event.stopPropagation(); enforceAction('${escapeHtml(incident.incident_id)}', 'block')">Block</button>
@@ -286,6 +327,19 @@ function showActionOptions(btn, incidentId) {
     btn.nextElementSibling.hidden = false;
 }
 
+function handlePrimaryAction(btn, incidentId, decision) {
+    const normalized = String(decision || "Alert").toLowerCase();
+    if (normalized === "alert") {
+        showActionOptions(btn, incidentId);
+        return;
+    }
+    if (normalized === "allow" || normalized === "block") {
+        enforceAction(incidentId, normalized);
+        return;
+    }
+    showActionOptions(btn, incidentId);
+}
+
 async function enforceAction(incidentId, action) {
     try {
         const updated = await api(`/api/incidents/${encodeURIComponent(incidentId)}/enforce`, {
@@ -295,7 +349,7 @@ async function enforceAction(incidentId, action) {
         if (index >= 0) state.incidents[index] = updated;
         renderIncidents();
         renderHistory();
-        showToast(`Incident enforced: ${action.toUpperCase()}`);
+        showToast(updated.action_taken || `Incident enforced: ${action.toUpperCase()}`);
     } catch(err) {
         showToast(err.message);
     }
@@ -308,23 +362,24 @@ function renderHistory() {
   byId("history-visible-count").textContent = historyIncidents.length;
   byId("history-empty-state").hidden = historyIncidents.length > 0;
   body.innerHTML = historyIncidents.map((incident, index) => {
-    const score = Number(incident.risk_score || 0);
     const classification = incident.file_classification || "Public";
     const decision = incident.policy_decision || "Allow";
-    const status = incidentStatus(incident.incident_status);
     const deviceEvent = incident.incident_type === "usb_device";
     const manualAction = incident.manual_action || decision;
+    const channel = incidentChannel(incident);
+    const destination = incidentDestination(incident);
     return `<tr data-id="${escapeHtml(incident.incident_id)}" tabindex="0">
       <td><span class="primary-cell">${escapeHtml(formatDate(incident.event_time))}</span><span class="secondary-cell">${escapeHtml(incident.incident_id)}</span></td>
       <td><span class="primary-cell">${escapeHtml(incident.user_name)}</span><span class="secondary-cell">${escapeHtml(incident.device_name)}</span></td>
       <td><span class="primary-cell">${escapeHtml(deviceEvent ? "USB device insertion" : incident.file_name)}</span><span class="secondary-cell">${deviceEvent ? "Device authorization event" : `${incident.finding_count || (Array.isArray(incident.sensitive_findings) ? incident.sensitive_findings.length : 0)} findings${incident.duplicate_incident_count ? ` | ${incident.duplicate_incident_count} duplicate` : ""}`}</span></td>
       <td><span class="badge badge-${classification.toLowerCase()}">${escapeHtml(classification)}</span></td>
-      <td><div class="risk"><span>${score}</span><span class="risk-meter"><span style="width:${score}%;background:${riskColor(score)}"></span></span></div><span class="secondary-cell">${riskLevel(score)}</span></td>
-      <td><span class="badge status-${statusClass(status)}">${escapeHtml(status)}</span></td>
-      <td><span class="primary-cell">${escapeHtml(incident.assigned_to || "Unassigned")}</span></td>
+      <td><span class="primary-cell">${escapeHtml(channel)}</span><span class="secondary-cell">${escapeHtml(incident.process_name || incident.change_type || "Transfer method")}</span></td>
+      <td><span class="primary-cell">${escapeHtml(destination)}</span><span class="secondary-cell">${escapeHtml(incident.destination_classification || "")}</span></td>
       <td>
-        <span class="badge decision-${manualAction.toLowerCase()}">${escapeHtml(manualAction)}</span>
-        ${can("incidents.update") ? `<button class="table-button danger delete-incident-btn" style="margin-left:8px;" data-id="${escapeHtml(incident.incident_id)}" onclick="deleteIncident(event, this.dataset.id)">Delete</button>` : ""}
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <span class="badge decision-${manualAction.toLowerCase()}">${escapeHtml(manualAction)}</span>
+          ${can("incidents.update") ? `<button class="table-button danger delete-incident-btn" data-id="${escapeHtml(incident.incident_id)}" onclick="deleteIncident(event, this.dataset.id)">Delete</button>` : ""}
+        </div>
       </td>
     </tr>`;
   }).join("");
@@ -345,12 +400,11 @@ function showIncident(incident) {
   const decision = incident.policy_decision || "Allow";
   const score = Number(incident.risk_score || 0);
   const deviceEvent = incident.incident_type === "usb_device";
+  const processEvent = incident.incident_type === "network_exfiltration" && incident.process_pid;
   byId("detail-id").textContent = incident.incident_id || "Incident";
   const tabs = [
     ["overview", "Overview"],
     ...(can("ai_analysis.view") ? [["ai", "AI analysis"]] : []),
-    ["investigation", "Investigation"],
-    ...(can("evidence.view") ? [["evidence", "Evidence"]] : []),
     ["timeline", "Timeline"]
   ];
   byId("detail-content").innerHTML = `<div class="incident-workspace-layout">
@@ -363,6 +417,7 @@ function showIncident(incident) {
         ${railFact("Assigned to", incident.assigned_to || "Unassigned")}
         ${railFact("User", incident.user_name || "Unknown")}
         ${railFact("USB device", incident.device_name || "Unknown")}
+        ${processEvent ? railFact("Process state", incident.enforcement_state || "observed") : ""}
       </div>
     </aside>
     <div class="incident-main">
@@ -376,19 +431,16 @@ function showIncident(incident) {
         ${detail("Classification", classification)}${detail("Risk / priority", `${score}/100 (${riskLevel(score)})`)}
         ${detail("Investigation status", incidentStatus(incident.incident_status))}${detail("Assigned analyst", incident.assigned_to || "Unassigned")}
         ${detail("Action taken", incident.action_taken || decision)}${detail("Matched policies", (incident.matched_policy_names || []).join(", ") || "Baseline policy")}
+        ${processEvent ? `${detail("Source process", `${incident.process_name || "Unknown"} (PID ${incident.process_pid})`)}${detail("Destination", `${incident.remote_ip || "Unknown"}:${incident.remote_port || ""}`)}${detail("Enforcement state", incident.enforcement_state || "observed")}` : ""}
         ${deviceEvent ? "" : `${detail("File path", incident.file_path, true)}
         <div class="detail-field full"><dt>File fingerprints</dt><dd class="hash-list"><span class="hash-value">SHA-256: ${escapeHtml(hashes.sha256 || "Not recorded")}</span><span class="hash-value">SHA-1: ${escapeHtml(hashes.sha1 || "Not recorded")}</span><span class="hash-value">MD5: ${escapeHtml(hashes.md5 || "Not recorded")}</span></dd></div>
         <div class="detail-field full"><dt>Sensitive data found</dt><dd>${findings.length ? `<ul class="finding-list">${findings.map((item) => `<li><strong>${escapeHtml(labelize(item.kind))}</strong> | ${escapeHtml(item.severity)} | ${escapeHtml(item.match)}</li>`).join("")}</ul>` : "None"}</dd></div>`}
         ${detail("Policy reasons", (incident.policy_reasons || []).join("; "), true)}
       </dl></section>
       ${can("ai_analysis.view") ? `<section class="detail-panel" data-detail-panel="ai" role="tabpanel" hidden>${aiAnalysisSection(incident)}</section>` : ""}
-      <section class="detail-panel" data-detail-panel="investigation" role="tabpanel" hidden>${can("incidents.update") ? workflowForm(incident) : ""}${caseNotesSection(incident)}${investigationHistorySection(incident)}</section>
-      ${can("evidence.view") ? `<section class="detail-panel" data-detail-panel="evidence" role="tabpanel" hidden>${evidenceSection(incident)}</section>` : ""}
       <section class="detail-panel" data-detail-panel="timeline" role="tabpanel" hidden>${timelineSection(incident)}</section>
     </div>
   </div>`;
-  const workflow = byId("incident-workflow");
-  if (workflow) workflow.addEventListener("submit", (event) => updateIncident(event, incident.incident_id));
   setupIncidentTabs();
   byId("incident-dialog").showModal();
   if (can("ai_analysis.view")) loadAiAnalyses(incident.incident_id);

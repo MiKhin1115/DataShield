@@ -1,0 +1,110 @@
+{
+  "evidence_id": "EVD-A7C563D5E933",
+  "incident_id": "INC-3AE8226DA5B5",
+  "collected_at": "2026-08-21T02:07:22.158204+00:00",
+  "retained_until": "2026-11-19T02:07:22.158204+00:00",
+  "file_name": "toys.csv",
+  "file_path": "D:\\toys.csv",
+  "file_size": 259,
+  "file_type": ".csv",
+  "file_hashes": {
+    "sha256": "7065377904cf0b3a728b80c5f96351cd8a3279515fb9cd9c419bc2dbf9435906",
+    "sha1": "7423e671d60d751bf6636cd84631d39ac637941a",
+    "md5": "eba742c6e91a3be006d9dc814a956255"
+  },
+  "usb_serial_number": "4B875E91",
+  "usb_manufacturer": "(Standard disk drives)",
+  "usb_device_name": "Removable Disk D:",
+  "username": "M S I",
+  "computer_name": "DESKTOP-VKJ595B",
+  "ip_addresses": [
+    "10.189.136.41",
+    "192.168.100.146",
+    "fe80::4cd0:1d21:96cb:9b0"
+  ],
+  "event_time": "2026-08-21T02:07:22.149359+00:00",
+  "sensitive_findings": [
+    {
+      "kind": "confidential_keyword",
+      "match": "CONF...TIAL",
+      "position": 32,
+      "severity": "medium"
+    },
+    {
+      "kind": "salary_or_payroll",
+      "match": "PAYROLL",
+      "position": 45,
+      "severity": "high"
+    },
+    {
+      "kind": "salary_or_payroll",
+      "match": "salary",
+      "position": 71,
+      "severity": "high"
+    },
+    {
+      "kind": "phone_number",
+      "match": "2450000",
+      "position": 110,
+      "severity": "medium"
+    },
+    {
+      "kind": "bank_account",
+      "match": "acco...3333",
+      "position": 123,
+      "severity": "high"
+    },
+    {
+      "kind": "phone_number",
+      "match": "1111...3333",
+      "position": 132,
+      "severity": "medium"
+    },
+    {
+      "kind": "phone_number",
+      "match": "2800000",
+      "position": 165,
+      "severity": "medium"
+    },
+    {
+      "kind": "bank_account",
+      "match": "acco...6666",
+      "position": 178,
+      "severity": "high"
+    },
+    {
+      "kind": "phone_number",
+      "match": "4444...6666",
+      "position": 187,
+      "severity": "medium"
+    },
+    {
+      "kind": "phone_number",
+      "match": "2100000",
+      "position": 221,
+      "severity": "medium"
+    },
+    {
+      "kind": "bank_account",
+      "match": "acco...9999",
+      "position": 234,
+      "severity": "high"
+    },
+    {
+      "kind": "phone_number",
+      "match": "7777...9999",
+      "position": 243,
+      "severity": "medium"
+    }
+  ],
+  "matched_policies": [
+    "Block restricted files"
+  ],
+  "action_taken": "Block",
+  "encryption": "Windows DPAPI current-user",
+  "protected_copy_preserved": true,
+  "protected_copy_error": null,
+  "protected_copy_name": "EVD-A7C563D5E933.dpapi",
+  "protected_copy_sha256": "449c9da75e6deea28ed139e6fdd95f002e4f1360957ef44e555a1f4cf9392ca2",
+  "manifest_sha256": "1ea2731bd4d8081bca580d8895e7f3b6dbbf9c04fef5de1e1d2a86c3ce4339e9"
+}

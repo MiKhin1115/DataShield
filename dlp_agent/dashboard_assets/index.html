@@ -27,9 +27,8 @@
         <button data-view="overview" class="nav-button active" type="button"><span class="nav-glyph">01</span><span>Overview</span></button>
         <button data-view="incidents" class="nav-button" type="button"><span class="nav-glyph">02</span><span>Incidents</span></button>
         <button data-view="history" class="nav-button" type="button"><span class="nav-glyph">03</span><span>History</span></button>
-        <button data-view="policies" data-permission="policies.view" class="nav-button" type="button"><span class="nav-glyph">04</span><span>Policies</span></button>
-        <button data-view="access" data-permission="users.manage" class="nav-button" type="button"><span class="nav-glyph">05</span><span>Access control</span></button>
-        <button data-view="audit" data-permission="audit.view" class="nav-button" type="button"><span class="nav-glyph">06</span><span>Audit log</span></button>
+        <button data-view="access" data-permission="users.manage" class="nav-button" type="button"><span class="nav-glyph">04</span><span>Access control</span></button>
+        <button data-view="audit" data-permission="audit.view" class="nav-button" type="button"><span class="nav-glyph">05</span><span>Audit log</span></button>
       </nav>
 
     </aside>
@@ -68,7 +67,7 @@
       </section>
 
       <section id="view-incidents" class="page-view" hidden>
-        <div class="page-title"><div><h2>Incident activity</h2><p>Review, search, and manage security incidents triggered by USB activity. Currently showing <span id="visible-count">0</span> records.</p></div><a class="button button-primary" href="/api/export.csv">Export incidents</a></div>
+        <div class="page-title"><div><h2>Incident activity</h2><p>Review, search, and manage security incidents across USB, web, cloud, email, and command-line transfers. Currently showing <span id="visible-count">0</span> records.</p></div><a class="button button-primary" href="/api/export.csv">Export incidents</a></div>
         <form id="filters" class="incident-filters">
           <div class="filter-bar primary-filter-bar">
             <label class="search-field"><span>Search incidents</span><input id="search" type="search" placeholder="ID, user, device, file, or hash"></label>
@@ -98,12 +97,12 @@
             </div>
           </details>
         </form>
-        <div class="table-shell"><table><thead><tr><th>Time</th><th>User &amp; device</th><th>File</th><th>Classification</th><th>Risk</th><th>Status</th><th>Analyst</th><th>Action</th></tr></thead><tbody id="incident-rows"></tbody></table><div id="empty-state" class="empty-state" hidden><strong>No incidents found</strong><span>Recorded USB activity will appear here.</span></div></div>
+        <div class="table-shell"><table><thead><tr><th>Time</th><th>User &amp; Device</th><th>File</th><th>Classification</th><th>Channel</th><th>Destination</th><th>Action</th></tr></thead><tbody id="incident-rows"></tbody></table><div id="empty-state" class="empty-state" hidden><strong>No incidents found</strong><span>Recorded transfer activity will appear here.</span></div></div>
       </section>
 
       <section id="view-history" class="page-view" hidden>
         <div class="page-title"><div><h2>Enforcement History</h2><p>Review resolved incidents and manual enforcement actions. Currently showing <span id="history-visible-count">0</span> records.</p></div></div>
-        <div class="table-shell"><table><thead><tr><th>Time</th><th>User &amp; device</th><th>File</th><th>Classification</th><th>Risk</th><th>Status</th><th>Analyst</th><th>Outcome</th></tr></thead><tbody id="history-rows"></tbody></table><div id="history-empty-state" class="empty-state" hidden><strong>No history found</strong><span>Resolved records will appear here.</span></div></div>
+        <div class="table-shell"><table><thead><tr><th>Time</th><th>User &amp; Device</th><th>File</th><th>Classification</th><th>Channel</th><th>Destination</th><th>Action</th></tr></thead><tbody id="history-rows"></tbody></table><div id="history-empty-state" class="empty-state" hidden><strong>No history found</strong><span>Resolved records will appear here.</span></div></div>
       </section>
 
       <section id="view-policies" class="page-view" hidden>

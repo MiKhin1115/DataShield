@@ -30,6 +30,8 @@ class IncidentStore:
             "investigation_notes",
             "timeline",
             "manual_action",
+            "action_taken",
+            "enforcement_state",
         }
         clean_changes = {key: value for key, value in changes.items() if key in allowed}
         with self._lock:

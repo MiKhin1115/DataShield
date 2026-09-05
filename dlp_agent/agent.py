@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import getpass
+import ipaddress
 import json
 import os
 import sys
@@ -21,6 +22,7 @@ from .incident_store import IncidentStore
 from .network_monitor import NetworkConnectionEvent, NetworkMonitor
 from .policy import PolicyEngine
 from .policy_store import PolicyStore
+from .process_enforcer import suspend_process
 from .rbac import UserStore
 from .sensitive_scanner import SensitiveDataScanner
 from .synthetic_data import generate_synthetic_dataset
@@ -439,30 +441,41 @@ class UsbDlpAgent:
         department = str(managed_user.get("department") if managed_user else os.environ.get("USB_DLP_DEPARTMENT", "Unknown"))
         computer_name, ip_addresses = system_context()
         
-        ip = event.remote_address
-        is_internal = ip.startswith("192.168.") or ip.startswith("10.") or (ip.startswith("172.") and 16 <= int(ip.split(".")[1]) <= 31)
-        
+        try:
+            is_internal = ipaddress.ip_address(event.remote_address).is_private
+        except ValueError:
+            is_internal = False
         ip_classification = "Internal" if is_internal else "External"
-        
+
         file_name_display = event.extracted_file_name if event.extracted_file_name != event.process_name else event.process_name
-        
+
         findings = []
+        scan_error = None
+        scan_readable = True
         if event.extracted_file_path and not event.extracted_file_path.startswith("PID:"):
-            try:
-                result = self.scanner.scan_file(Path(event.extracted_file_path))
-                findings = result.findings
-            except Exception:
-                pass
-        
+            result = self.scanner.scan_file(Path(event.extracted_file_path))
+            findings = result.findings
+            scan_error = result.error
+            scan_readable = result.readable
+
+        detection_title = (
+            "PowerShell transfer command detected"
+            if event.status == "COMMAND_DETECTED"
+            else "Outbound connection detected"
+        )
         timeline = [
-            self._timeline_event("connection_detected", f"Outbound connection detected: {file_name_display}", f"{event.process_name} (PID: {event.pid}) connected to {event.remote_address}:{event.remote_port} ({ip_classification})"),
+            self._timeline_event(
+                "connection_detected",
+                f"{detection_title}: {file_name_display}",
+                f"{event.process_name} (PID: {event.pid}) targeted {event.remote_address}:{event.remote_port} ({ip_classification})",
+            ),
         ]
 
         assessment = self.policy_engine.assess(
             findings,
-            None,
+            scan_error,
             {
-                "file_extension": event.extracted_file_path.split('.')[-1].lower() if '.' in event.extracted_file_path else "",
+                "file_extension": Path(event.extracted_file_path).suffix.lower(),
                 "user_name": user_name,
                 "department": department,
                 "transfer_time": datetime.now().strftime("%H:%M"),
@@ -470,26 +483,38 @@ class UsbDlpAgent:
             }
         )
 
-        if ip_classification == "External" and event.process_name.lower() in ("powershell.exe", "cmd.exe"):
-            import psutil
-            from .firewall_enforcer import block_ip_firewall
-            
-            block_ip_firewall(event.remote_address)
-            try:
-                psutil.Process(event.pid).terminate()
-                action_desc = f"Process terminated and firewall rule added for {event.remote_address} (External)"
-            except (psutil.NoSuchProcess, psutil.AccessDenied, ValueError, TypeError):
-                action_desc = f"Firewall rule added for {event.remote_address} (External)"
-                
-            timeline.append(self._timeline_event("policy_decision", "Policy action selected: Block (Automated)", "Network Exfiltration Prevention"))
-            policy_decision = "Block"
+        is_shell_process = event.process_name.casefold() in {
+            "powershell.exe",
+            "pwsh.exe",
+            "cmd.exe",
+        }
+        if is_shell_process and (findings or scan_error):
+            suspension = suspend_process(
+                event.pid,
+                event.process_name,
+                event.process_create_time,
+            )
+            action_desc = suspension.message
+            enforcement_state = suspension.state
+            timeline.append(
+                self._timeline_event(
+                    "policy_decision",
+                    "Sensitive command-line transfer awaiting SOC decision",
+                    suspension.message,
+                )
+            )
+            policy_decision = "Alert"
             risk_score = max(85, assessment.risk_score)
         else:
             action_desc = f"Connection detected to {event.remote_address} ({ip_classification})"
+            enforcement_state = "observed"
             timeline.append(self._timeline_event("policy_decision", f"Policy action selected: {assessment.policy_decision}", "Network Exfiltration Prevention"))
             policy_decision = assessment.policy_decision
             risk_score = assessment.risk_score
-        
+
+        content_classification = (
+            assessment.file_classification if findings or scan_error else ip_classification
+        )
         incident: dict[str, object] = {
             "incident_id": f"INC-{uuid4().hex[:12].upper()}",
             "incident_type": "network_exfiltration",
@@ -506,28 +531,33 @@ class UsbDlpAgent:
             "usb_authorization_status": "",
             "drive": "",
             "file_name": event.extracted_file_name,
-            "file_type": "exe",
+            "file_type": Path(event.extracted_file_path).suffix.lower() or "Data Payload",
             "file_path": event.extracted_file_path,
             "remote_ip": event.remote_address,
+            "remote_port": event.remote_port,
+            "process_name": event.process_name,
             "process_pid": event.pid,
+            "process_create_time": event.process_create_time,
+            "process_status": event.status,
+            "enforcement_state": enforcement_state,
             "file_size": 0,
-            "change_type": "network_connection",
+            "change_type": "powershell_transfer" if is_shell_process else "network_connection",
             "sensitive_findings": [asdict(f) for f in findings],
             "finding_count": len(findings),
-            "scan_readable": True,
-            "scan_error": None,
+            "scan_readable": scan_readable,
+            "scan_error": scan_error,
             "file_hashes": {},
             "hash_error": None,
             "duplicate_incident_count": 0,
-            "file_classification": ip_classification,
-            "recommended_classification": ip_classification,
+            "file_classification": content_classification,
+            "recommended_classification": content_classification,
             "risk_score": risk_score,
             "policy_decision": policy_decision,
             "action_taken": action_desc,
-            "policy_reasons": assessment.policy_reasons + [f"Process attempted to connect to a restricted {ip_classification} IP address"],
+            "policy_reasons": assessment.policy_reasons + [f"Command-line process targeted an {ip_classification.lower()} network destination"],
             "matched_policy_ids": assessment.matched_policy_ids + ["NET-EXFIL-001"],
             "matched_policy_names": assessment.matched_policy_names + ["Network Exfiltration Prevention"],
-            "notify_soc": True,
+            "notify_soc": bool(findings or scan_error) or policy_decision != "Allow",
             "incident_status": "Open",
             "assigned_to": "",
             "status_history": [],
@@ -744,26 +774,33 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="USB Data Loss Prevention agent")
     subparsers = parser.add_subparsers(dest="command")
 
-    run_parser = subparsers.add_parser("run", help="watch USB devices and scan copied files")
-    run_parser.add_argument("--interval", type=float, default=2.0, help="poll interval in seconds")
-    run_parser.add_argument(
-        "--log-file", default="data/incidents.jsonl", help="incident record file"
-    )
-    run_parser.add_argument(
-        "--alert-webhook",
-        default=os.environ.get("USB_DLP_ALERT_WEBHOOK"),
-        help="optional SOC webhook URL",
-    )
-    run_parser.add_argument("--policies-file", default="data/policies.json")
-    run_parser.add_argument("--usb-registry", default="data/usb_devices.json")
-    run_parser.add_argument("--users-file", default="data/users.json")
-    run_parser.add_argument("--evidence-directory", default="data/evidence")
-    run_parser.add_argument("--evidence-retention-days", type=int, default=90)
-    run_parser.add_argument(
-        "--no-evidence-copy",
-        action="store_true",
-        help="store evidence metadata without preserving an encrypted file copy",
-    )
+    def add_monitor_arguments(command_parser: argparse.ArgumentParser) -> None:
+        command_parser.add_argument(
+            "--interval", type=float, default=0.5, help="poll interval in seconds"
+        )
+        command_parser.add_argument(
+            "--log-file", default="data/incidents.jsonl", help="incident record file"
+        )
+        command_parser.add_argument(
+            "--alert-webhook",
+            default=os.environ.get("USB_DLP_ALERT_WEBHOOK"),
+            help="optional SOC webhook URL",
+        )
+        command_parser.add_argument("--policies-file", default="data/policies.json")
+        command_parser.add_argument("--usb-registry", default="data/usb_devices.json")
+        command_parser.add_argument("--users-file", default="data/users.json")
+        command_parser.add_argument("--evidence-directory", default="data/evidence")
+        command_parser.add_argument("--evidence-retention-days", type=int, default=90)
+        command_parser.add_argument(
+            "--no-evidence-copy",
+            action="store_true",
+            help="store evidence metadata without preserving an encrypted file copy",
+        )
+
+    run_parser = subparsers.add_parser("run", help="monitor USB and command-line transfers")
+    add_monitor_arguments(run_parser)
+    monitor_parser = subparsers.add_parser("monitor", help="alias for the DLP monitoring agent")
+    add_monitor_arguments(monitor_parser)
 
     scan_parser = subparsers.add_parser("scan", help="scan one or more files")
     scan_parser.add_argument("paths", nargs="+", help="files to scan")
@@ -815,7 +852,7 @@ def main(argv: list[str] | None = None) -> int:
 
         return serve_dashboard(args.host, args.port, Path(args.log_file))
 
-    interval = args.interval if args.interval is not None else 2.0
+    interval = args.interval if args.interval is not None else 0.5
     log_file = Path(getattr(args, "log_file", "data/incidents.jsonl"))
     webhook = getattr(args, "alert_webhook", None)
     agent = UsbDlpAgent(
