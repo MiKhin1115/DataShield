@@ -46,9 +46,18 @@ class WindowsUsbEnforcer:
     POWERSHELL_WIPE_COMMAND = (
         "& { param([string]$targetDrive) "
         "$drive = $targetDrive.TrimEnd('\\'); "
-        "if ($drive -match '^[D-Z]:$') { "
-        "  Remove-Item -Path \"$drive\\*\" -Recurse -Force -ErrorAction SilentlyContinue; "
-        "} "
+        "if ($drive -notmatch '^[D-Z]:$') { Write-Error 'Invalid removable-drive letter'; exit 4 }; "
+        "$logicalDisk = Get-CimInstance Win32_LogicalDisk -Filter (\"DeviceID='\" + $drive + \"'\") -ErrorAction Stop; "
+        "if ($null -eq $logicalDisk -or [int]$logicalDisk.DriveType -ne 2) { "
+        "  Write-Error 'Target is not a removable drive'; exit 6 "
+        "}; "
+        "$root = [IO.Path]::GetFullPath($drive + '\\'); "
+        "if ($root -ne ($drive + '\\')) { Write-Error 'Invalid removable-drive root'; exit 4 }; "
+        "if (-not (Test-Path -LiteralPath $root -PathType Container)) { Write-Error 'USB drive was not found'; exit 2 }; "
+        "$items = @(Get-ChildItem -LiteralPath $root -Force -ErrorAction Stop); "
+        "foreach ($entry in $items) { Remove-Item -LiteralPath $entry.FullName -Recurse -Force -ErrorAction Stop }; "
+        "$remaining = @(Get-ChildItem -LiteralPath $root -Force -ErrorAction Stop); "
+        "if ($remaining.Count -ne 0) { Write-Error 'USB cleanup verification failed'; exit 7 }; "
         "$shell = New-Object -ComObject Shell.Application; "
         "$item = $shell.Namespace(17).ParseName($drive); "
         "if ($null -eq $item) { Write-Error 'USB drive was not found'; exit 2 }; "
@@ -187,7 +196,7 @@ class WindowsUsbEnforcer:
                 check=False,
                 capture_output=True,
                 text=True,
-                timeout=15,
+                timeout=60,
             )
         except (OSError, subprocess.SubprocessError) as exc:
             return UsbEnforcementResult(
@@ -200,7 +209,7 @@ class WindowsUsbEnforcer:
             return UsbEnforcementResult(
                 True,
                 "Wiped and Blocked - device safely ejected",
-                f"Windows wiped and ejected {drive_path}; remove the USB device before reconnecting it.",
+                f"Windows deleted all files from {drive_path}, verified the drive was empty, and safely ejected it.",
             )
 
         error = (completed.stderr or completed.stdout).strip()

@@ -258,3 +258,14 @@
 {"audit_id": "AUD-55902961D414", "event_time": "2026-09-06T02:37:36.602277+00:00", "actor": "admin", "action": "incident_manual_block", "target_type": "incident", "target_id": "INC-86A85D08A677", "details": ""}
 {"audit_id": "AUD-066D0DD8446C", "event_time": "2026-09-06T02:37:49.087486+00:00", "actor": "admin", "action": "incident_deleted", "target_type": "incident", "target_id": "INC-86A85D08A677", "details": ""}
 {"audit_id": "AUD-667C7F951071", "event_time": "2026-09-06T02:37:49.119037+00:00", "actor": "admin", "action": "incident_deleted", "target_type": "incident", "target_id": "INC-DE7E9651C5D9", "details": ""}
+{"audit_id": "AUD-12662356ADE9", "event_time": "2026-09-06T02:45:59.129140+00:00", "actor": "soc", "action": "login", "target_type": "session", "target_id": "USR-A5ED14B1D6", "details": ""}
+{"audit_id": "AUD-DD09B4F1551A", "event_time": "2026-09-06T02:55:18.710815+00:00", "actor": "soc", "action": "incident_manual_allow", "target_type": "incident", "target_id": "INC-7525B06C3C99", "details": ""}
+{"audit_id": "AUD-E04739FB49C2", "event_time": "2026-09-06T02:55:46.698890+00:00", "actor": "soc", "action": "incident_manual_block", "target_type": "incident", "target_id": "INC-E9B88EEDC874", "details": ""}
+{"audit_id": "AUD-64DA4C39B637", "event_time": "2026-09-06T03:00:12.595803+00:00", "actor": "soc", "action": "login", "target_type": "session", "target_id": "USR-A5ED14B1D6", "details": ""}
+{"audit_id": "AUD-EA1EC7506542", "event_time": "2026-09-06T03:06:05.203276+00:00", "actor": "soc", "action": "incident_manual_block", "target_type": "incident", "target_id": "INC-186985AB1033", "details": ""}
+{"audit_id": "AUD-199AD9BFD391", "event_time": "2026-09-06T03:06:17.886813+00:00", "actor": "soc", "action": "incident_deleted", "target_type": "incident", "target_id": "INC-186985AB1033", "details": ""}
+{"audit_id": "AUD-245905E48AB3", "event_time": "2026-09-06T03:06:17.920124+00:00", "actor": "soc", "action": "incident_deleted", "target_type": "incident", "target_id": "INC-E9B88EEDC874", "details": ""}
+{"audit_id": "AUD-97310B52AD02", "event_time": "2026-09-06T03:06:17.951027+00:00", "actor": "soc", "action": "incident_deleted", "target_type": "incident", "target_id": "INC-7525B06C3C99", "details": ""}
+{"audit_id": "AUD-F49DE975302B", "event_time": "2026-09-06T03:09:12.345663+00:00", "actor": "soc", "action": "incident_manual_block", "target_type": "incident", "target_id": "INC-67ED0BB22878", "details": ""}
+{"audit_id": "AUD-8F29583750CB", "event_time": "2026-09-06T03:14:56.411774+00:00", "actor": "soc", "action": "login", "target_type": "session", "target_id": "USR-A5ED14B1D6", "details": ""}
+{"audit_id": "AUD-24606FAE8790", "event_time": "2026-09-06T03:15:25.170311+00:00", "actor": "soc", "action": "incident_manual_block", "target_type": "incident", "target_id": "INC-94A4C1FBE312", "details": ""}

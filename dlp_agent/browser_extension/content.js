@@ -1,6 +1,7 @@
 (function() {
     const recentlyReported = new Map();
     const socAllowedFiles = new Map();
+    const cleanScanCache = new WeakMap();
 
     function reportToDashboard(url, fileName, sampleText = "", scanResult = null, action = "Blocked by Enterprise Browser Extension") {
         if (scanResult && scanResult.soc_override) return;
@@ -226,7 +227,7 @@
                         blocked: true,
                         error: "Deep inspection service timed out."
                     });
-                }, 5000);
+                }, 20000);
                 pendingDeepScans.set(requestId, { resolve, timer });
                 window.postMessage({
                     type: "ANTIGRAVITY_DLP_SCAN_REQUEST",
@@ -262,6 +263,10 @@
 
     async function scanFileBackend(file) {
         if (!file) return { blocked: true, error: "No file was available for inspection." };
+        const cachedScan = cleanScanCache.get(file);
+        if (cachedScan && cachedScan.expires_at > Date.now()) {
+            return cachedScan.result;
+        }
         const approvalExpires = socAllowedFiles.get(file.name || "");
         if (approvalExpires && approvalExpires > Date.now()) {
             return {
@@ -315,65 +320,184 @@
         }
     }
 
-    // 3. Hook standard HTML Forms & File Input selection (Deep Content Inspection)
-    document.addEventListener("change", async function(e) {
-        if (e.target && e.target.type === "file" && e.target.files && e.target.files.length > 0) {
-            const file = e.target.files[0];
-            const uploadTarget = (e.target.form && e.target.form.action) || window.location.href;
-            window.lastUploadCandidate = file.name;
-            // Start the gate synchronously, before the page can begin its upload.
-            window.dlpActiveScans++;
+    // 3. Gate standard file inputs before apps such as Telegram can read the
+    // FileList. The original event is never allowed to reach the application;
+    // a clean selection is restored and replayed only after inspection passes.
+    const replayingFileInputs = new WeakSet();
 
-            // The local agent is the single source of truth. ZIP files must be
-            // decompressed, not interpreted as raw text in the page.
-            scanFileBackend(file).then(scanResult => {
-                if (scanResult && scanResult.blocked) {
-                    window.lastBlockedFile = file.name;
-                    window.lastBlockedTime = Date.now();
-                    blockAndAlert(uploadTarget, file.name, "", scanResult);
-                } else {
-                    window.lastBlockedFile = null;
-                    reportToDashboard(
-                        uploadTarget,
-                        file.name,
-                        "",
-                        scanResult,
-                        "Allowed by Enterprise Browser Extension"
-                    );
-                }
-            }).finally(() => {
-                window.dlpActiveScans--;
+    async function inspectFiles(files) {
+        const inspected = [];
+        for (const file of files) {
+            window.lastUploadCandidate = file.name;
+            const scanResult = await scanFileBackend(file);
+            if (!scanResult || scanResult.blocked) {
+                return { blocked: true, file, scanResult: scanResult || { blocked: true, error: "Deep inspection returned no result." } };
+            }
+            cleanScanCache.set(file, {
+                result: scanResult,
+                expires_at: Date.now() + 60_000
             });
+            inspected.push({ file, scanResult });
         }
+        return { blocked: false, inspected };
+    }
+
+    function releaseActiveScan() {
+        window.dlpActiveScans = Math.max(0, window.dlpActiveScans - 1);
+    }
+
+    function reportInspectedFiles(uploadTarget, inspected) {
+        for (const item of inspected) {
+            reportToDashboard(
+                uploadTarget,
+                item.file.name,
+                "",
+                item.scanResult,
+                "Allowed by Enterprise Browser Extension"
+            );
+        }
+    }
+
+    function allowEmptyFilesWithoutReplay(uploadTarget, files) {
+        const emptyResult = {
+            blocked: false,
+            findings: [],
+            finding_count: 0,
+            classification: "Public",
+            risk_score: 0,
+            error: null
+        };
+        window.lastBlockedFile = null;
+        for (const file of files) {
+            window.lastUploadCandidate = file.name;
+            cleanScanCache.set(file, {
+                result: emptyResult,
+                expires_at: Date.now() + 60_000
+            });
+            reportToDashboard(
+                uploadTarget,
+                file.name,
+                "",
+                emptyResult,
+                "Allowed by Enterprise Browser Extension"
+            );
+        }
+    }
+
+    function restoreFileSelection(input, files) {
+        const transfer = new DataTransfer();
+        for (const file of files) transfer.items.add(file);
+        input.files = transfer.files;
+    }
+
+    document.addEventListener("change", function(e) {
+        const input = e.target;
+        if (!input || input.type !== "file" || replayingFileInputs.has(input)) return;
+        const files = input.files ? Array.from(input.files) : [];
+        if (!files.length) return;
+        const uploadTarget = (input.form && input.form.action) || window.location.href;
+
+        // Empty files contain no data to inspect. Preserve the browser's original
+        // trusted event so Telegram can handle the selection natively.
+        if (files.every(file => file.size === 0)) {
+            allowEmptyFilesWithoutReplay(uploadTarget, files);
+            return;
+        }
+
+        // This must happen synchronously in the capture phase. Telegram attaches
+        // its own handlers after document_start and otherwise queues the file
+        // while the asynchronous scanner is still running.
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        input.value = "";
+        window.dlpActiveScans++;
+
+        inspectFiles(files).then(result => {
+            // Release the network gate before Telegram receives the replayed
+            // event. Otherwise its upload request can remain queued indefinitely.
+            releaseActiveScan();
+            if (result.blocked) {
+                window.lastBlockedFile = result.file.name;
+                window.lastBlockedTime = Date.now();
+                input.value = "";
+                blockAndAlert(uploadTarget, result.file.name, "", result.scanResult);
+                return;
+            }
+
+            window.lastBlockedFile = null;
+            try {
+                restoreFileSelection(input, files);
+                replayingFileInputs.add(input);
+                input.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }));
+                reportInspectedFiles(uploadTarget, result.inspected);
+            } catch (error) {
+                input.value = "";
+                blockAndAlert(uploadTarget, files[0].name, "", {
+                    blocked: true,
+                    error: "The inspected file could not be safely handed back to the upload page."
+                });
+            } finally {
+                replayingFileInputs.delete(input);
+            }
+        }).catch(() => {
+            releaseActiveScan();
+            input.value = "";
+            blockAndAlert(uploadTarget, files[0].name, "", {
+                blocked: true,
+                error: "Deep inspection could not complete safely."
+            });
+        });
     }, true);
 
-    // 4. Hook Drag & Drop to capture the FULL file before web apps slice it into chunks
-    document.addEventListener("drop", async function(e) {
-        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            const file = e.dataTransfer.files[0];
-            window.lastUploadCandidate = file.name;
-            window.dlpActiveScans++;
-
-            // Agent handoff scans the complete file before the web app slices it.
-            scanFileBackend(file).then(scanResult => {
-                if (scanResult && scanResult.blocked) {
-                    window.lastBlockedFile = file.name;
-                    window.lastBlockedTime = Date.now();
-                    blockAndAlert(window.location.href, file.name, "", scanResult);
-                } else {
-                    window.lastBlockedFile = null;
-                    reportToDashboard(
-                        window.location.href,
-                        file.name,
-                        "",
-                        scanResult,
-                        "Allowed by Enterprise Browser Extension"
-                    );
-                }
-            }).finally(() => {
-                window.dlpActiveScans--;
-            });
+    // 4. Apply the same hold-and-replay gate to drag-and-drop uploads.
+    let replayingDrop = false;
+    document.addEventListener("drop", function(e) {
+        if (replayingDrop || !e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+        const files = Array.from(e.dataTransfer.files);
+        const dropTarget = e.target;
+        if (files.every(file => file.size === 0)) {
+            allowEmptyFilesWithoutReplay(window.location.href, files);
+            return;
         }
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        window.dlpActiveScans++;
+
+        inspectFiles(files).then(result => {
+            releaseActiveScan();
+            if (result.blocked) {
+                window.lastBlockedFile = result.file.name;
+                window.lastBlockedTime = Date.now();
+                blockAndAlert(window.location.href, result.file.name, "", result.scanResult);
+                return;
+            }
+
+            window.lastBlockedFile = null;
+            try {
+                const transfer = new DataTransfer();
+                for (const file of files) transfer.items.add(file);
+                replayingDrop = true;
+                dropTarget.dispatchEvent(new DragEvent("drop", {
+                    bubbles: true,
+                    cancelable: true,
+                    dataTransfer: transfer
+                }));
+                reportInspectedFiles(window.location.href, result.inspected);
+            } catch (error) {
+                blockAndAlert(window.location.href, files[0].name, "", {
+                    blocked: true,
+                    error: "The inspected files could not be safely handed back to the upload page."
+                });
+            } finally {
+                replayingDrop = false;
+            }
+        }).catch(() => {
+            releaseActiveScan();
+            blockAndAlert(window.location.href, files[0].name, "", {
+                blocked: true,
+                error: "Deep inspection could not complete safely."
+            });
+        });
     }, true);
 
     // Surface Google Drive's own security/upload rejection in the incident dashboard.

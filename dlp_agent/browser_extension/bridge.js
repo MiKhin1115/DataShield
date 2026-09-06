@@ -17,14 +17,38 @@ function forwardToBackground(payload) {
     }
 }
 
-function arrayBufferToBase64(buffer) {
-    const bytes = new Uint8Array(buffer);
-    const chunkSize = 0x8000;
+const SCAN_CHUNK_BYTES = 256 * 1024;
+
+function bytesToBase64(bytes) {
+    const stringChunkSize = 0x8000;
     let binary = "";
-    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-        binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+    for (let offset = 0; offset < bytes.length; offset += stringChunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + stringChunkSize));
     }
     return btoa(binary);
+}
+
+function sendRuntimeMessage(message) {
+    return new Promise((resolve, reject) => {
+        try {
+            chrome.runtime.sendMessage(message, (response) => {
+                const runtimeError = chrome.runtime.lastError;
+                if (runtimeError) {
+                    reject(new Error(runtimeError.message));
+                    return;
+                }
+                if (!response || !response.success) {
+                    reject(new Error(response && response.error
+                        ? response.error
+                        : "Extension service worker did not accept the request."));
+                    return;
+                }
+                resolve(response);
+            });
+        } catch (error) {
+            reject(error);
+        }
+    });
 }
 
 function returnScanResult(requestId, result) {
@@ -63,7 +87,7 @@ function fallbackToLocalAgent(message, relayError) {
         }));
 }
 
-function forwardScanToBackground(message) {
+async function forwardScanToBackground(message) {
     if (!message.request_id || !message.file_data || typeof message.file_data.byteLength !== "number") {
         if (message.request_id) {
             returnScanResult(message.request_id, {
@@ -74,21 +98,38 @@ function forwardScanToBackground(message) {
         return;
     }
     try {
-        chrome.runtime.sendMessage({
-            type: "SCAN_FILE",
+        const bytes = new Uint8Array(message.file_data);
+        const totalChunks = Math.max(1, Math.ceil(bytes.byteLength / SCAN_CHUNK_BYTES));
+        await sendRuntimeMessage({
+            type: "SCAN_FILE_START",
             payload: {
+                request_id: message.request_id,
                 file_name: String(message.file_name || "unknown"),
                 file_type: String(message.file_type || "application/octet-stream"),
-                file_data_base64: arrayBufferToBase64(message.file_data)
+                total_size: bytes.byteLength,
+                total_chunks: totalChunks
             }
-        }, (response) => {
-            if (chrome.runtime.lastError || !response || !response.success) {
-                fallbackToLocalAgent(message, "Deep inspection service is unavailable.");
-                return;
-            }
-            returnScanResult(message.request_id, response.data);
         });
+
+        for (let index = 0; index < totalChunks; index++) {
+            const start = index * SCAN_CHUNK_BYTES;
+            await sendRuntimeMessage({
+                type: "SCAN_FILE_CHUNK",
+                payload: {
+                    request_id: message.request_id,
+                    index: index,
+                    file_data_base64: bytesToBase64(bytes.subarray(start, start + SCAN_CHUNK_BYTES))
+                }
+            });
+        }
+
+        const response = await sendRuntimeMessage({
+            type: "SCAN_FILE_FINISH",
+            payload: { request_id: message.request_id }
+        });
+        returnScanResult(message.request_id, response.data);
     } catch (error) {
+        console.error("DLP Bridge: Chunked deep inspection relay failed:", error);
         fallbackToLocalAgent(message, "Deep inspection request could not be relayed.");
     }
 }

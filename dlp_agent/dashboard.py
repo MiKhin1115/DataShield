@@ -556,9 +556,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             else:
                 from .usb_enforcement import WindowsUsbEnforcer
 
-                result = WindowsUsbEnforcer().block_transfer(
+                # A manual USB Block is a device-wide containment action: erase
+                # the removable drive, verify it is empty, and only then eject it.
+                result = WindowsUsbEnforcer().wipe_and_block(
                     str(incident.get("drive", "")),
-                    str(incident.get("file_path", "")),
                 )
                 action_message = result.action
                 action_details = result.details

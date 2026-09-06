@@ -5,19 +5,19 @@ from unittest.mock import patch
 
 from dlp_agent.dashboard import DashboardHandler
 from dlp_agent.incident_store import IncidentStore
-from dlp_agent.usb_enforcement import UsbEnforcementResult
+from dlp_agent.usb_enforcement import UsbEnforcementResult, WindowsUsbEnforcer
 
 
 class FakeWindowsUsbEnforcer:
     result = UsbEnforcementResult(
         True,
-        "Blocked - device safely ejected",
-        "Windows ejected D:\\",
+        "Wiped and Blocked - device safely ejected",
+        "Windows wiped and ejected D:\\",
     )
-    transfers: list[tuple[str, str]] = []
+    drives: list[str] = []
 
-    def block_transfer(self, drive_path: str, file_path: str) -> UsbEnforcementResult:
-        self.transfers.append((drive_path, file_path))
+    def wipe_and_block(self, drive_path: str) -> UsbEnforcementResult:
+        self.drives.append(drive_path)
         return self.result
 
 
@@ -59,11 +59,11 @@ class UsbSocActionTests(TestCase):
         self.assertEqual(updated["incident_status"], "Closed")
         self.assertEqual(updated["timeline"][-1]["event_type"], "soc_enforcement")
 
-    def test_block_safely_ejects_usb_without_wiping_it(self) -> None:
+    def test_block_wipes_entire_usb_then_safely_ejects_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             store = IncidentStore(Path(directory) / "incidents.jsonl")
             self._append_pending_incident(store, "INC-USB-BLOCK")
-            FakeWindowsUsbEnforcer.transfers = []
+            FakeWindowsUsbEnforcer.drives = []
 
             with patch(
                 "dlp_agent.usb_enforcement.WindowsUsbEnforcer",
@@ -73,13 +73,24 @@ class UsbSocActionTests(TestCase):
             updated = store.get("INC-USB-BLOCK")
 
         self.assertEqual(
-            FakeWindowsUsbEnforcer.transfers,
-            [("D:\\", "D:\\sensitive.csv")],
+            FakeWindowsUsbEnforcer.drives,
+            ["D:\\"],
         )
         self.assertEqual(updated["manual_action"], "block")
         self.assertEqual(updated["enforcement_state"], "blocked")
         self.assertEqual(updated["incident_status"], "Resolved")
-        self.assertIn("safely ejected", updated["action_taken"])
+        self.assertIn("Wiped and Blocked", updated["action_taken"])
+
+    def test_usb_cleanup_is_verified_before_ejection(self) -> None:
+        command = WindowsUsbEnforcer.POWERSHELL_WIPE_COMMAND
+
+        self.assertIn("Win32_LogicalDisk", command)
+        self.assertIn("DriveType", command)
+        self.assertIn("Get-ChildItem -LiteralPath $root -Force", command)
+        self.assertIn("Remove-Item -LiteralPath $entry.FullName -Recurse -Force -ErrorAction Stop", command)
+        self.assertIn("USB cleanup verification failed", command)
+        self.assertNotIn("SilentlyContinue", command)
+        self.assertLess(command.index("Remove-Item"), command.index("InvokeVerb('Eject')"))
 
     def test_legacy_usb_incident_uses_current_routed_ip(self) -> None:
         incident = {

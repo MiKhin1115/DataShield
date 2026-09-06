@@ -1,0 +1,84 @@
+{
+  "evidence_id": "EVD-88C7FBE932A5",
+  "incident_id": "INC-94A4C1FBE312",
+  "collected_at": "2026-09-06T03:15:13.732100+00:00",
+  "retained_until": "2026-12-05T03:15:13.732100+00:00",
+  "file_name": "public.zip",
+  "file_path": "D:\\public.zip",
+  "file_size": 344,
+  "file_type": ".zip",
+  "file_hashes": {
+    "sha256": "06cb504bcd914b37d8e17cb98ca4aa6b2daf211215ca6a69ecffc0765e0fcc79",
+    "sha1": "85730035b3da8285b5428692c0fd243763085cf5",
+    "md5": "301bd4eaa4232627e213df943d0bd2c0"
+  },
+  "usb_serial_number": "4B875E91",
+  "usb_manufacturer": "(Standard disk drives)",
+  "usb_device_name": "Removable Disk D:",
+  "username": "M S I",
+  "computer_name": "DESKTOP-VKJ595B",
+  "ip_addresses": [
+    "192.168.100.146",
+    "172.23.160.1",
+    "192.168.200.1",
+    "fe80::35ba:d760:6024:38e4",
+    "fe80::3a97:349f:8910:eb91",
+    "fe80::4cd0:1d21:96cb:9b0"
+  ],
+  "event_time": "2026-09-06T03:15:13.712829+00:00",
+  "sensitive_findings": [
+    {
+      "kind": "confidential_keyword",
+      "match": "REST...CTED",
+      "position": 76,
+      "severity": "medium"
+    },
+    {
+      "kind": "confidential_keyword",
+      "match": "INTE...ONLY",
+      "position": 89,
+      "severity": "medium"
+    },
+    {
+      "kind": "password",
+      "match": "pass...3456",
+      "position": 108,
+      "severity": "critical"
+    },
+    {
+      "kind": "api_key",
+      "match": "api_...cdef",
+      "position": 137,
+      "severity": "critical"
+    },
+    {
+      "kind": "phone_number",
+      "match": "1234...7890",
+      "position": 159,
+      "severity": "medium"
+    },
+    {
+      "kind": "api_key",
+      "match": "acce...7890",
+      "position": 177,
+      "severity": "critical"
+    },
+    {
+      "kind": "phone_number",
+      "match": "1234...7890",
+      "position": 212,
+      "severity": "medium"
+    }
+  ],
+  "matched_policies": [
+    "Block restricted files",
+    "Unknown USB device review"
+  ],
+  "action_taken": "Awaiting SOC decision",
+  "encryption": "Windows DPAPI current-user",
+  "protected_copy_preserved": true,
+  "protected_copy_error": null,
+  "protected_copy_name": "EVD-88C7FBE932A5.dpapi",
+  "protected_copy_sha256": "ecf33efb10a31bddd7f0a4acdf30dc053fb951c1f55af10837b11175c0d33634",
+  "manifest_sha256": "b0d43f0751f585d641c421bfbdae20a2efc177f6148c19fe3e6b8ae28b99186b"
+}
