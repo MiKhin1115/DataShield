@@ -1,6 +1,7 @@
 import tempfile
 from pathlib import Path
 from unittest import TestCase
+from unittest.mock import patch
 
 from dlp_agent.agent import UsbDlpAgent, utc_now_iso
 from dlp_agent.file_monitor import FileCopyEvent
@@ -137,10 +138,11 @@ class UsbDevicePolicyTests(TestCase):
             event_types = [item["event_type"] for item in incident["timeline"]]
             self.assertIn("device_block_failed", event_types)
 
-    def test_file_decision_respects_unknown_and_unauthorized_device_status(self) -> None:
-        for device_status, expected_decision, minimum_risk in (
-            ("unknown", "Alert", 50),
-            ("unauthorized", "Block", 90),
+    def test_usb_file_events_wait_for_soc_decision(self) -> None:
+        for device_status, minimum_risk in (
+            ("unknown", 50),
+            ("unauthorized", 90),
+            ("authorized", 0),
         ):
             with self.subTest(device_status=device_status), tempfile.TemporaryDirectory() as directory:
                 registry = UsbRegistry(Path(directory) / "usb.json")
@@ -166,16 +168,23 @@ class UsbDevicePolicyTests(TestCase):
                 path.write_text("Public product announcement", encoding="utf-8")
                 stat = path.stat()
 
-                incident = agent.scan_file_event(
-                    FileCopyEvent(
-                        root=Path(directory),
-                        path=path,
-                        size=stat.st_size,
-                        modified_ns=stat.st_mtime_ns,
-                        change_type="created",
+                with patch(
+                    "dlp_agent.agent.system_context",
+                    return_value=("WORKSTATION", ["192.168.100.146", "172.23.160.1"]),
+                ):
+                    incident = agent.scan_file_event(
+                        FileCopyEvent(
+                            root=Path(directory),
+                            path=path,
+                            size=stat.st_size,
+                            modified_ns=stat.st_mtime_ns,
+                            change_type="created",
+                        )
                     )
-                )
 
                 self.assertEqual(incident.usb_authorization_status, device_status)
-                self.assertEqual(incident.policy_decision, expected_decision)
+                self.assertEqual(incident.policy_decision, "Alert")
+                self.assertEqual(incident.action_taken, "Awaiting SOC decision")
+                self.assertEqual(incident.enforcement_state, "pending_soc")
+                self.assertEqual(incident.source_ip, "192.168.100.146")
                 self.assertGreaterEqual(incident.risk_score, minimum_risk)

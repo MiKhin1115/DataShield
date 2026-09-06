@@ -1,0 +1,49 @@
+{
+  "evidence_id": "EVD-CF8F28C92C9E",
+  "incident_id": "INC-50D6FC5D175F",
+  "collected_at": "2026-09-06T02:05:33.482419+00:00",
+  "retained_until": "2026-12-05T02:05:33.482419+00:00",
+  "file_name": "salary critical data.txt",
+  "file_path": "D:\\salary critical data.txt",
+  "file_size": 0,
+  "file_type": ".txt",
+  "file_hashes": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sha1": "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+    "md5": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "usb_serial_number": "4B875E91",
+  "usb_manufacturer": "(Standard disk drives)",
+  "usb_device_name": "Removable Disk D:",
+  "username": "M S I",
+  "computer_name": "DESKTOP-VKJ595B",
+  "ip_addresses": [
+    "192.168.100.146",
+    "172.23.160.1",
+    "192.168.200.1",
+    "fe80::35ba:d760:6024:38e4",
+    "fe80::3a97:349f:8910:eb91",
+    "fe80::4cd0:1d21:96cb:9b0"
+  ],
+  "event_time": "2026-09-06T02:05:33.462530+00:00",
+  "sensitive_findings": [
+    {
+      "kind": "salary_or_payroll",
+      "match": "salary",
+      "position": 0,
+      "severity": "high"
+    }
+  ],
+  "matched_policies": [
+    "Block TXT on personal USB",
+    "txt on filename",
+    "Unknown USB device review"
+  ],
+  "action_taken": "Awaiting SOC decision",
+  "encryption": "Windows DPAPI current-user",
+  "protected_copy_preserved": true,
+  "protected_copy_error": null,
+  "protected_copy_name": "EVD-CF8F28C92C9E.dpapi",
+  "protected_copy_sha256": "b8c89d70d59ce461c33d82e7abfa5cdcdb77764a84264abdf6ecb2120dda78d8",
+  "manifest_sha256": "e322b4c5b57aace945b74dff634831393b837f19754f9f8ef0d8ea382287526a"
+}

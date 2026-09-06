@@ -112,7 +112,8 @@ chrome.runtime.onMessage.addListener((message) => {
     if (!message || message.type !== "SOC_DECISION") return;
     window.postMessage({
         type: "ANTIGRAVITY_DLP_SOC_DECISION",
-        action: message.action
+        action: message.action,
+        file_name: message.file_name || ""
     }, "*");
 });
 

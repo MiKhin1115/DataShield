@@ -6,6 +6,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
+from unittest.mock import patch
 from zipfile import ZipFile
 
 from dlp_agent.dashboard import DashboardHandler
@@ -48,6 +49,22 @@ class DashboardDeepScanTests(TestCase):
         allowed_headers = response.getheader("Access-Control-Allow-Headers", "").lower()
         self.assertEqual(response.status, 200)
         self.assertIn("x-file-name", allowed_headers)
+
+    def test_legacy_browser_incident_displays_current_routed_source_ip(self) -> None:
+        legacy = {
+            "device_id": "BROWSER_EXT",
+            "device_name": "192.168.100.143",
+            "destination_url": "http://192.168.100.143:1234/upload",
+            "ip_addresses": ["127.0.0.1"],
+        }
+        with patch(
+            "dlp_agent.dashboard._source_ipv4_for_destination",
+            return_value="192.168.100.146",
+        ):
+            public = DashboardHandler._public_incident(legacy)
+
+        self.assertEqual(public["source_ip"], "192.168.100.146")
+        self.assertEqual(public["ip_addresses"], ["192.168.100.146"])
 
     def test_endpoint_blocks_sensitive_zip_with_innocent_names(self) -> None:
         archive_bytes = io.BytesIO()
@@ -149,7 +166,8 @@ class DashboardDeepScanTests(TestCase):
         self.assertEqual(incidents[0]["file_name"], "public access.zip")
         self.assertEqual(incidents[0]["finding_count"], 1)
         self.assertEqual(incidents[0]["sensitive_findings"][0]["kind"], "password")
-        self.assertEqual(incidents[0]["policy_decision"], "Block")
+        self.assertEqual(incidents[0]["policy_decision"], "Alert")
+        self.assertEqual(incidents[0]["enforcement_state"], "pending_soc")
         self.assertEqual(incidents[0]["action_taken"], "Blocked by Google Drive security")
         self.assertEqual(incidents[0]["channel"], "Google Drive")
         self.assertEqual(incidents[0]["destination"], "drive.google.com")
@@ -169,10 +187,13 @@ class DashboardDeepScanTests(TestCase):
             incidents[0]["timeline"][0]["description"],
             "Google Drive upload attempt detected",
         )
+        for event in incidents[0]["timeline"]:
+            self.assertTrue(event["event_time"])
+            self.assertEqual(event["title"], event["description"])
 
     def test_web_upload_to_ip_has_detailed_timeline(self) -> None:
         incident_payload = {
-            "url": "http://192.168.200.3:6666/upload",
+            "url": "http://192.168.100.143:1234/upload",
             "file_name": "customer-list.csv",
             "action": "Blocked by Enterprise Browser Extension",
             "blocked": True,
@@ -188,12 +209,16 @@ class DashboardDeepScanTests(TestCase):
         }
         body = json.dumps(incident_payload).encode("utf-8")
         connection = HTTPConnection("127.0.0.1", self.server.server_port)
-        connection.request(
-            "POST",
-            "/api/browser_incident",
-            body=body,
-            headers={"Content-Type": "application/json"},
-        )
+        with patch(
+            "dlp_agent.dashboard._source_ipv4_for_destination",
+            return_value="192.168.100.146",
+        ):
+            connection.request(
+                "POST",
+                "/api/browser_incident",
+                body=body,
+                headers={"Content-Type": "application/json"},
+            )
         response = connection.getresponse()
         response.read()
         connection.close()
@@ -201,15 +226,20 @@ class DashboardDeepScanTests(TestCase):
         incident = DashboardHandler.store.query(limit=1)[0]
         self.assertEqual(response.status, 200)
         self.assertEqual(incident["channel"], "Web Upload")
-        self.assertEqual(incident["destination"], "192.168.200.3:6666")
+        self.assertEqual(incident["destination"], "192.168.100.143:1234")
+        self.assertEqual(incident["source_ip"], "192.168.100.146")
+        self.assertEqual(incident["ip_addresses"], ["192.168.100.146"])
         self.assertEqual(incident["destination_scope"], "Internal")
         self.assertEqual(incident["file_classification"], "Confidential")
         self.assertEqual(len(incident["timeline"]), 7)
+        for event in incident["timeline"]:
+            self.assertTrue(event["event_time"])
+            self.assertEqual(event["title"], event["description"])
         self.assertEqual(
             incident["timeline"][0]["description"],
             "Browser file upload attempt detected",
         )
-        self.assertIn("192.168.200.3:6666", incident["timeline"][1]["details"])
+        self.assertIn("192.168.100.143:1234", incident["timeline"][1]["details"])
         self.assertIn("email", incident["timeline"][3]["details"])
         self.assertEqual(
             incident["timeline"][5]["description"],
@@ -249,7 +279,8 @@ class DashboardDeepScanTests(TestCase):
         by_destination = {incident["destination"]: incident for incident in incidents}
         for _url, destination, scope in destinations:
             incident = by_destination[destination]
-            self.assertEqual(incident["policy_decision"], "Allow")
+            self.assertEqual(incident["policy_decision"], "Alert")
+            self.assertEqual(incident["enforcement_state"], "pending_soc")
             self.assertEqual(incident["action_taken"], "Allowed by Enterprise Browser Extension")
             self.assertEqual(incident["file_classification"], "Public")
             self.assertNotIn(incident["file_classification"], {"Internal", "External"})
@@ -318,6 +349,7 @@ class DashboardDeepScanTests(TestCase):
         self.assertEqual(response.status, 200)
         self.assertEqual(len(commands), 1)
         self.assertEqual(commands[0]["action"], "block")
+        self.assertEqual(commands[0]["file_name"], "sensitive.txt")
         self.assertEqual(commands[0]["browser_tab_id"], 42)
         self.assertEqual(commands[0]["browser_window_id"], 7)
         self.assertEqual(updated["enforcement_state"], "close_requested")

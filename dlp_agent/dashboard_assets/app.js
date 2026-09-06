@@ -1,7 +1,9 @@
 const state = {
   user: null, permissions: new Set(), incidents: [], summary: null,
   policies: [], users: [], roles: [], analysts: [], usbDevices: [], aiStatus: null,
-  timer: null, currentView: "overview"
+  timer: null, currentView: "overview", historyClearMode: false,
+  selectedHistoryIds: new Set(), pendingHistoryDelete: null,
+  pendingUsbDeleteId: null
 };
 
 const incidentStatuses = ["Open", "Investigating", "Resolved", "False Positive", "Escalated", "Pending User Confirmation", "Pending Manager Approval", "Closed"];
@@ -39,7 +41,11 @@ async function api(url, options = {}) {
     showLogin();
     throw new Error(data.error || "Authentication required");
   }
-  if (!response.ok) throw new Error(data.error || "Request failed");
+  if (!response.ok) {
+    const error = new Error(data.error || "Request failed");
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
@@ -112,6 +118,17 @@ function incidentDestination(incident) {
   return "Not recorded";
 }
 
+function incidentSourceDevice(incident) {
+  const addresses = [
+    incident.source_ip,
+    ...(Array.isArray(incident.ip_addresses) ? incident.ip_addresses : [])
+  ].filter(Boolean).map(String);
+  const routedAddress = addresses.find((address) =>
+    address !== "127.0.0.1" && address !== "::1" && address !== "0.0.0.0"
+  );
+  return routedAddress || incident.computer_name || incident.device_name || "Unknown device";
+}
+
 function isoDateValue(id) {
   const value = byId(id).value;
   if (!value) return "";
@@ -133,6 +150,8 @@ function showLogin() {
   state.user = null;
   state.permissions = new Set();
   state.aiStatus = null;
+  state.historyClearMode = false;
+  state.selectedHistoryIds.clear();
   byId("login-view").hidden = false;
   byId("app-shell").hidden = true;
   window.clearInterval(state.timer);
@@ -187,17 +206,6 @@ function switchView(viewName) {
   if (viewName === "access") loadAccess();
   if (viewName === "audit") loadAudit();
 }
-
-window.deleteIncident = async function(e, id) {
-  e.stopPropagation();
-  if (!confirm("Are you sure you want to permanently delete this incident?")) return;
-  try {
-    await api(`/api/incidents/${encodeURIComponent(id)}`, { method: "DELETE" });
-    loadIncidents();
-  } catch(err) {
-    alert("Failed to delete incident: " + err.message);
-  }
-};
 
 async function loadDashboard(showMessage = false) {
   try {
@@ -298,7 +306,7 @@ function renderIncidents() {
     const destination = incidentDestination(incident);
     return `<tr data-id="${escapeHtml(incident.incident_id)}" tabindex="0">
       <td><span class="primary-cell">${escapeHtml(formatDate(incident.event_time))}</span><span class="secondary-cell">${escapeHtml(incident.incident_id)}</span></td>
-      <td><span class="primary-cell">${escapeHtml(incident.user_name)}</span><span class="secondary-cell">${escapeHtml(incident.device_name)}</span></td>
+      <td><span class="primary-cell">${escapeHtml(incident.user_name)}</span><span class="secondary-cell">${escapeHtml(incidentSourceDevice(incident))}</span></td>
       <td><span class="primary-cell">${escapeHtml(deviceEvent ? "USB device insertion" : incident.file_name)}</span><span class="secondary-cell">${deviceEvent ? "Device authorization event" : `${incident.finding_count || (Array.isArray(incident.sensitive_findings) ? incident.sensitive_findings.length : 0)} findings${incident.duplicate_incident_count ? ` | ${incident.duplicate_incident_count} duplicate` : ""}`}</span></td>
       <td><span class="badge badge-${classification.toLowerCase()}">${escapeHtml(classification)}</span></td>
       <td><span class="primary-cell">${escapeHtml(channel)}</span><span class="secondary-cell">${escapeHtml(incident.process_name || incident.change_type || "Transfer method")}</span></td>
@@ -359,6 +367,10 @@ function renderHistory() {
   const body = byId("history-rows");
   if (!body) return;
   const historyIncidents = state.incidents.filter(i => ["Resolved", "Closed", "False Positive"].includes(incidentStatus(i.incident_status)));
+  const historyIds = new Set(historyIncidents.map((incident) => String(incident.incident_id)));
+  for (const incidentId of state.selectedHistoryIds) {
+    if (!historyIds.has(incidentId)) state.selectedHistoryIds.delete(incidentId);
+  }
   byId("history-visible-count").textContent = historyIncidents.length;
   byId("history-empty-state").hidden = historyIncidents.length > 0;
   body.innerHTML = historyIncidents.map((incident, index) => {
@@ -368,17 +380,19 @@ function renderHistory() {
     const manualAction = incident.manual_action || decision;
     const channel = incidentChannel(incident);
     const destination = incidentDestination(incident);
+    const checkbox = state.historyClearMode && can("incidents.update")
+      ? `<input class="history-select-checkbox" type="checkbox" aria-label="Select incident ${escapeHtml(incident.incident_id)}" ${state.selectedHistoryIds.has(String(incident.incident_id)) ? "checked" : ""}>`
+      : "";
     return `<tr data-id="${escapeHtml(incident.incident_id)}" tabindex="0">
-      <td><span class="primary-cell">${escapeHtml(formatDate(incident.event_time))}</span><span class="secondary-cell">${escapeHtml(incident.incident_id)}</span></td>
-      <td><span class="primary-cell">${escapeHtml(incident.user_name)}</span><span class="secondary-cell">${escapeHtml(incident.device_name)}</span></td>
+      <td><div class="history-time-cell">${checkbox}<div><span class="primary-cell">${escapeHtml(formatDate(incident.event_time))}</span><span class="secondary-cell">${escapeHtml(incident.incident_id)}</span></div></div></td>
+      <td><span class="primary-cell">${escapeHtml(incident.user_name)}</span><span class="secondary-cell">${escapeHtml(incidentSourceDevice(incident))}</span></td>
       <td><span class="primary-cell">${escapeHtml(deviceEvent ? "USB device insertion" : incident.file_name)}</span><span class="secondary-cell">${deviceEvent ? "Device authorization event" : `${incident.finding_count || (Array.isArray(incident.sensitive_findings) ? incident.sensitive_findings.length : 0)} findings${incident.duplicate_incident_count ? ` | ${incident.duplicate_incident_count} duplicate` : ""}`}</span></td>
       <td><span class="badge badge-${classification.toLowerCase()}">${escapeHtml(classification)}</span></td>
       <td><span class="primary-cell">${escapeHtml(channel)}</span><span class="secondary-cell">${escapeHtml(incident.process_name || incident.change_type || "Transfer method")}</span></td>
       <td><span class="primary-cell">${escapeHtml(destination)}</span><span class="secondary-cell">${escapeHtml(incident.destination_classification || "")}</span></td>
       <td>
-        <div style="display: flex; gap: 8px; align-items: center;">
+        <div class="table-actions">
           <span class="badge decision-${manualAction.toLowerCase()}">${escapeHtml(manualAction)}</span>
-          ${can("incidents.update") ? `<button class="table-button danger delete-incident-btn" data-id="${escapeHtml(incident.incident_id)}" onclick="deleteIncident(event, this.dataset.id)">Delete</button>` : ""}
         </div>
       </td>
     </tr>`;
@@ -391,6 +405,81 @@ function renderHistory() {
     row.addEventListener("click", open);
     row.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") open(); });
   });
+  body.querySelectorAll(".history-select-checkbox").forEach((checkbox) => {
+    checkbox.addEventListener("click", (event) => event.stopPropagation());
+    checkbox.addEventListener("change", () => {
+      const incidentId = String(checkbox.closest("tr").dataset.id);
+      if (checkbox.checked) state.selectedHistoryIds.add(incidentId);
+      else state.selectedHistoryIds.delete(incidentId);
+      updateHistoryClearControls(historyIncidents.length);
+    });
+  });
+  updateHistoryClearControls(historyIncidents.length);
+}
+
+function updateHistoryClearControls(historyCount = 0) {
+  const toggle = byId("history-clear-toggle");
+  const actions = byId("history-clear-actions");
+  if (!toggle || !actions) return;
+  toggle.hidden = state.historyClearMode;
+  actions.hidden = !state.historyClearMode;
+  const selectedCount = state.selectedHistoryIds.size;
+  const selectedButton = byId("history-delete-selected");
+  selectedButton.textContent = `Delete selected (${selectedCount})`;
+  selectedButton.disabled = selectedCount === 0;
+  byId("history-clear-all").disabled = historyCount === 0;
+}
+
+function setHistoryClearMode(enabled) {
+  state.historyClearMode = Boolean(enabled);
+  state.selectedHistoryIds.clear();
+  renderHistory();
+}
+
+function requestHistoryDeletion(clearAll) {
+  const incidentIds = [...state.selectedHistoryIds];
+  if (!clearAll && incidentIds.length === 0) return;
+  state.pendingHistoryDelete = { clearAll: Boolean(clearAll), incidentIds };
+  byId("history-delete-message").textContent = clearAll
+    ? "All resolved, closed, and false-positive history records will be permanently deleted. Open incidents will remain available."
+    : `${incidentIds.length} selected history ${incidentIds.length === 1 ? "record" : "records"} will be permanently deleted.`;
+  byId("history-delete-confirm").textContent = clearAll ? "Clear all history" : `Delete ${incidentIds.length} selected`;
+  byId("history-delete-dialog").showModal();
+}
+
+async function confirmHistoryDeletion() {
+  const request = state.pendingHistoryDelete;
+  if (!request) return;
+  state.pendingHistoryDelete = null;
+  byId("history-delete-dialog").close();
+  let incidentIds = [...request.incidentIds];
+  try {
+    if (request.clearAll) {
+      const data = await api("/api/incidents?limit=1000");
+      incidentIds = (data.incidents || [])
+        .filter((incident) => ["Resolved", "Closed", "False Positive"].includes(incidentStatus(incident.incident_status)))
+        .map((incident) => String(incident.incident_id));
+    }
+    const progressButton = request.clearAll ? byId("history-clear-all") : byId("history-delete-selected");
+    let deletedCount = 0;
+    for (let index = 0; index < incidentIds.length; index += 1) {
+      progressButton.disabled = true;
+      progressButton.textContent = `Deleting ${index + 1} of ${incidentIds.length}`;
+      try {
+        await api(`/api/incidents/${encodeURIComponent(incidentIds[index])}`, { method: "DELETE" });
+        deletedCount += 1;
+      } catch (deleteError) {
+        if (deleteError.status !== 404) throw deleteError;
+      }
+    }
+    state.historyClearMode = false;
+    state.selectedHistoryIds.clear();
+    await loadIncidents();
+    showToast(`${deletedCount} history ${deletedCount === 1 ? "record" : "records"} deleted`);
+  } catch (error) {
+    renderHistory();
+    showToast(error.message);
+  }
 }
 
 function showIncident(incident) {
@@ -633,9 +722,17 @@ function evidenceSection(incident) {
 
 function timelineSection(incident) {
   const events = Array.isArray(incident.timeline) && incident.timeline.length
-    ? [...incident.timeline].sort((left, right) => String(left.event_time).localeCompare(String(right.event_time)))
+    ? [...incident.timeline].sort((left, right) => String(timelineEventTime(left)).localeCompare(String(timelineEventTime(right))))
     : [{ event_time: incident.event_time, title: "Incident recorded", details: "Legacy incident without detailed event telemetry" }];
-  return `<section class="timeline-panel"><h3>Incident timeline</h3><ol class="timeline">${events.map((event) => `<li class="timeline-item"><time class="timeline-time">${escapeHtml(timelineTime(event.event_time))}</time><span class="timeline-marker"></span><div class="timeline-content"><strong>${escapeHtml(event.title)}</strong>${event.details ? `<span>${escapeHtml(event.details)}</span>` : ""}</div></li>`).join("")}</ol></section>`;
+  return `<section class="timeline-panel"><h3>Incident timeline</h3><ol class="timeline">${events.map((event) => `<li class="timeline-item"><time class="timeline-time">${escapeHtml(timelineTime(timelineEventTime(event)))}</time><span class="timeline-marker"></span><div class="timeline-content"><strong>${escapeHtml(timelineEventTitle(event))}</strong>${event.details ? `<span>${escapeHtml(event.details)}</span>` : ""}</div></li>`).join("")}</ol></section>`;
+}
+
+function timelineEventTime(event) {
+  return event.event_time || event.time || "";
+}
+
+function timelineEventTitle(event) {
+  return event.title || event.description || labelize(event.event_type || "Incident event");
 }
 
 function timelineTime(value) {
@@ -802,7 +899,7 @@ function renderUsbDevices() {
   byId("usb-empty").hidden = state.usbDevices.length > 0;
   byId("usb-rows").innerHTML = state.usbDevices.map((device) => `<tr><td>${escapeHtml(device.name)}</td><td>${escapeHtml(device.device_id)}</td><td><span class="badge ${device.status === "authorized" ? "decision-allow" : device.status === "blocked" ? "decision-block" : "decision-alert"}">${escapeHtml(labelize(device.status))}</span></td><td>${escapeHtml(formatDate(device.updated_at))}</td><td><div class="table-actions"><button class="table-button usb-edit" data-id="${escapeHtml(device.device_id)}" type="button">Edit</button><button class="table-button danger usb-delete" data-id="${escapeHtml(device.device_id)}" type="button">Delete</button></div></td></tr>`).join("");
   document.querySelectorAll(".usb-edit").forEach((button) => button.addEventListener("click", () => openUsb(button.dataset.id)));
-  document.querySelectorAll(".usb-delete").forEach((button) => button.addEventListener("click", () => deleteUsb(button.dataset.id)));
+  document.querySelectorAll(".usb-delete").forEach((button) => button.addEventListener("click", () => requestUsbDeletion(button.dataset.id)));
 }
 
 function openUsb(deviceId = "") {
@@ -818,10 +915,35 @@ async function saveUsb(event) {
   catch (error) { byId("usb-error").textContent = error.message; byId("usb-error").hidden = false; }
 }
 
-async function deleteUsb(id) {
-  if (!window.confirm("Remove this USB device registration?")) return;
-  try { await api(`/api/usb-devices/${encodeURIComponent(id)}`, { method: "DELETE" }); await loadAccess(); showToast("USB registration removed"); }
-  catch (error) { showToast(error.message); }
+function requestUsbDeletion(id) {
+  const device = state.usbDevices.find((item) => String(item.device_id) === String(id));
+  if (!device) {
+    showToast("USB authorization record not found");
+    return;
+  }
+  state.pendingUsbDeleteId = String(device.device_id);
+  byId("usb-delete-message").textContent = `Delete authorization for ${device.name || device.device_id} (${device.device_id})? The device will return to unknown status.`;
+  byId("usb-delete-dialog").showModal();
+}
+
+async function confirmUsbDeletion() {
+  const deviceId = state.pendingUsbDeleteId;
+  if (!deviceId) return;
+  state.pendingUsbDeleteId = null;
+  byId("usb-delete-dialog").close();
+  const button = byId("usb-delete-confirm");
+  button.disabled = true;
+  button.textContent = "Deleting...";
+  try {
+    await api(`/api/usb-devices/${encodeURIComponent(deviceId)}`, { method: "DELETE" });
+    await loadAccess();
+    showToast("USB authorization removed");
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Delete authorization";
+  }
 }
 
 async function loadAudit() {
@@ -854,6 +976,11 @@ byId("refresh-button").addEventListener("click", () => loadDashboard(true));
 byId("auto-refresh").addEventListener("change", scheduleRefresh);
 byId("filters").addEventListener("input", () => { window.clearTimeout(filterTimer); filterTimer = window.setTimeout(loadIncidents, 180); });
 byId("clear-filters").addEventListener("click", () => { byId("filters").reset(); loadIncidents(); });
+byId("history-clear-toggle").addEventListener("click", () => setHistoryClearMode(true));
+byId("history-clear-cancel").addEventListener("click", () => setHistoryClearMode(false));
+byId("history-delete-selected").addEventListener("click", () => requestHistoryDeletion(false));
+byId("history-clear-all").addEventListener("click", () => requestHistoryDeletion(true));
+byId("history-delete-confirm").addEventListener("click", confirmHistoryDeletion);
 byId("new-policy-button").addEventListener("click", () => openPolicy());
 byId("add-condition").addEventListener("click", () => addConditionRow());
 byId("policy-form").addEventListener("submit", savePolicy);
@@ -861,6 +988,7 @@ byId("new-user-button").addEventListener("click", () => openUser());
 byId("user-form").addEventListener("submit", saveUser);
 byId("new-usb-button").addEventListener("click", () => openUsb());
 byId("usb-form").addEventListener("submit", saveUsb);
+byId("usb-delete-confirm").addEventListener("click", confirmUsbDeletion);
 byId("refresh-audit").addEventListener("click", loadAudit);
 document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => byId(button.dataset.close).close()));
 document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("click", (event) => { if (event.target === dialog) dialog.close(); }));

@@ -5,6 +5,7 @@ import io
 import json
 import mimetypes
 import os
+import socket
 import tempfile
 import threading
 from dataclasses import asdict
@@ -35,6 +36,31 @@ from .sensitive_scanner import SensitiveDataScanner, SensitiveFinding
 from .usb_registry import UsbRegistry
 
 ASSET_DIRECTORY = Path(__file__).with_name("dashboard_assets")
+
+
+def _source_ipv4_for_destination(destination_host: str) -> str:
+    """Return the host IPv4 address selected by the OS route table."""
+    candidates = [destination_host, "8.8.8.8"]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        route_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            # UDP connect selects an interface without sending application data.
+            route_socket.connect((candidate, 443))
+            address = str(route_socket.getsockname()[0])
+            if address and not address.startswith("127.") and address != "0.0.0.0":
+                return address
+        except OSError:
+            pass
+        finally:
+            route_socket.close()
+
+    try:
+        address = socket.gethostbyname(socket.gethostname())
+    except OSError:
+        return "127.0.0.1"
+    return address or "127.0.0.1"
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
@@ -161,6 +187,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if self._require_mutation("usb.manage"):
                 self._upsert_usb()
             return
+        if parsed.path == "/api/incidents/history/delete":
+            if self._require_mutation("incidents.update"):
+                self._delete_history_incidents()
+            return
         if (
             len(path_parts) == 4
             and path_parts[:2] == ["api", "incidents"]
@@ -182,6 +212,32 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._update_incident(unquote(parsed.path.rsplit("/", 1)[-1]))
             return
         self.send_error(HTTPStatus.NOT_FOUND)
+
+    def _delete_history_incidents(self) -> None:
+        body = self._json_body()
+        clear_all = body.get("clear_all") is True
+        raw_ids = body.get("incident_ids", [])
+        if not clear_all and not isinstance(raw_ids, list):
+            self._serve_json({"error": "incident_ids must be a list"}, HTTPStatus.BAD_REQUEST)
+            return
+
+        incident_ids = [] if clear_all else list(dict.fromkeys(
+            str(value) for value in raw_ids[:250] if str(value).startswith("INC-")
+        ))
+        if not clear_all and not incident_ids:
+            self._serve_json({"error": "Select at least one history incident"}, HTTPStatus.BAD_REQUEST)
+            return
+
+        deleted_ids = self.store.delete_history(None if clear_all else incident_ids)
+        if deleted_ids:
+            scope = "all history" if clear_all else "selected history"
+            self._audit_change(
+                "history_incidents_deleted",
+                "incidents",
+                scope,
+                f"count={len(deleted_ids)}; ids={','.join(deleted_ids)}",
+            )
+        self._serve_json({"status": "ok", "deleted_count": len(deleted_ids), "deleted_ids": deleted_ids})
 
     def do_PUT(self) -> None:
         parsed = urlparse(self.path)
@@ -441,11 +497,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     )
             action_message = result.message
             enforcement_state = result.state
+            enforcement_time = datetime.now(timezone.utc).isoformat()
+            enforcement_title = f"SOC selected {action.title()}"
             timeline.append(
                 {
-                    "time": datetime.now(timezone.utc).isoformat(),
+                    "event_time": enforcement_time,
+                    "time": enforcement_time,
                     "event_type": "soc_enforcement",
-                    "description": f"SOC selected {action.title()}",
+                    "title": enforcement_title,
+                    "description": enforcement_title,
                     "details": result.message,
                 }
             )
@@ -459,6 +519,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         "command_id": f"{incident_id}-{len(timeline) + 1}",
                         "incident_id": incident_id,
                         "action": action,
+                        "file_name": incident.get("file_name"),
                         "browser_tab_id": incident.get("browser_tab_id"),
                         "browser_window_id": incident.get("browser_window_id"),
                     },
@@ -473,30 +534,53 @@ class DashboardHandler(BaseHTTPRequestHandler):
             else:
                 action_message = "Browser upload allowed by SOC"
                 enforcement_state = "allowed"
+            enforcement_time = datetime.now(timezone.utc).isoformat()
+            enforcement_title = f"SOC selected {action.title()}"
             timeline.append(
                 {
-                    "time": datetime.now(timezone.utc).isoformat(),
+                    "event_time": enforcement_time,
+                    "time": enforcement_time,
                     "event_type": "soc_enforcement",
-                    "description": f"SOC selected {action.title()}",
+                    "title": enforcement_title,
+                    "description": enforcement_title,
                     "details": action_message,
                 }
             )
-        elif action == "block" and incident.get("incident_type") != "network_exfiltration":
-            try:
-                drive = str(incident.get("drive", ""))
-                if drive:
-                    from .usb_enforcement import WindowsUsbEnforcer
-                    enforcer = WindowsUsbEnforcer()
-                    enforcer.wipe_and_block(drive)
-                    action_message = "USB device blocked by SOC"
-                    enforcement_state = "blocked"
-            except OSError as exc:
-                action_message = f"USB block failed: {exc}"
-                enforcement_state = "block_failed"
+        elif incident.get("drive") and incident.get("incident_type") != "network_exfiltration":
+            enforcement_time = datetime.now(timezone.utc).isoformat()
+            enforcement_title = f"SOC selected {action.title()}"
+            if action == "allow":
+                action_message = "USB transfer allowed by SOC"
+                action_details = "The removable drive remains available and monitored"
+                enforcement_state = "allowed"
+            else:
+                from .usb_enforcement import WindowsUsbEnforcer
+
+                result = WindowsUsbEnforcer().block_transfer(
+                    str(incident.get("drive", "")),
+                    str(incident.get("file_path", "")),
+                )
+                action_message = result.action
+                action_details = result.details
+                enforcement_state = "blocked" if result.enforced else "block_failed"
+            timeline.append(
+                {
+                    "event_time": enforcement_time,
+                    "time": enforcement_time,
+                    "event_type": "soc_enforcement",
+                    "title": enforcement_title,
+                    "description": enforcement_title,
+                    "details": action_details,
+                }
+            )
 
         changes = {
             "manual_action": action,
-            "incident_status": "Closed" if action == "allow" else "Resolved",
+            "incident_status": (
+                "Closed"
+                if action == "allow"
+                else "Open" if enforcement_state == "block_failed" else "Resolved"
+            ),
             "action_taken": action_message,
             "enforcement_state": enforcement_state,
             "timeline": timeline,
@@ -566,8 +650,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         
         from uuid import uuid4
         import getpass
-        import socket
-        
+
         def utc_now_iso() -> str:
             return datetime.now(timezone.utc).isoformat()
         
@@ -655,6 +738,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             destination = f"{parsed_host}:{target_port}" if target_port else parsed_host
         else:
             destination = target_url
+        source_ip = _source_ipv4_for_destination(parsed_host)
 
         scan_error = str(body.get("scan_error", ""))[:300] or None
         supplied_blocked = body.get("blocked")
@@ -694,12 +778,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
         risk_score = max(0, min(100, risk_score))
         if blocked and not findings:
             risk_score = max(risk_score, 75)
-        policy_decision = "Block" if blocked else "Allow"
+        # Browser activity always enters the SOC review stage first. The scan
+        # outcome remains in action_taken/timeline while the dashboard presents
+        # the analyst with an explicit Allow or Block decision.
+        policy_decision = "Alert"
         finding_types = sorted({str(item.get("kind", "unknown")) for item in findings})
         policy_reasons = [
-            "Browser upload inspected and blocked"
+            "Sensitive browser upload held for SOC review"
             if blocked
-            else "Browser upload inspected and allowed; no sensitive data was detected"
+            else "Browser upload inspected and recorded for SOC review"
         ]
         if finding_types:
             policy_reasons.append(f"Sensitive data detected: {', '.join(finding_types)}")
@@ -709,9 +796,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
         incident_id = f"INC-{uuid4().hex[:12].upper()}"
 
         def timeline_event(event_type: str, description: str, details: str) -> dict[str, str]:
+            event_time = utc_now_iso()
             return {
-                "time": utc_now_iso(),
+                "event_time": event_time,
+                "time": event_time,
                 "event_type": event_type,
+                "title": description,
                 "description": description,
                 "details": details,
             }
@@ -788,7 +878,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             "user_name": getpass.getuser(),
             "department": "Unknown",
             "computer_name": socket.gethostname(),
-            "ip_addresses": ["127.0.0.1"],
+            "source_ip": source_ip,
+            "ip_addresses": [source_ip],
             "device_id": "BROWSER_EXT",
             "device_name": app_name,
             "browser_client_id": browser_client_id,
@@ -823,6 +914,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             "matched_policy_names": ["HTTPS Payload Inspection"],
             "manual_action": "",
             "incident_status": "Open",
+            "enforcement_state": "pending_soc",
             "timeline": timeline,
         }
         self.store.append(incident)
@@ -1036,6 +1128,39 @@ class DashboardHandler(BaseHTTPRequestHandler):
     @staticmethod
     def _public_incident(incident: dict[str, object]) -> dict[str, object]:
         public = dict(incident)
+        if incident.get("device_id") == "BROWSER_EXT":
+            source_ip = str(incident.get("source_ip", ""))
+            if not source_ip or source_ip.startswith("127.") or source_ip == "0.0.0.0":
+                target_url = str(
+                    incident.get("destination_url")
+                    or incident.get("file_path", "")
+                ).removeprefix("Target: ")
+                destination_host = urlparse(target_url).hostname or ""
+                source_ip = _source_ipv4_for_destination(destination_host)
+                public["source_ip"] = source_ip
+                public["ip_addresses"] = [source_ip]
+        elif incident.get("drive") and not incident.get("source_ip"):
+            # Legacy USB incidents stored every adapter address and the UI
+            # commonly picked a virtual adapter. Show the current routed host
+            # IPv4 for those records; new incidents persist source_ip directly.
+            source_ip = _source_ipv4_for_destination("")
+            public["source_ip"] = source_ip
+            public["ip_addresses"] = [source_ip]
+        if (
+            incident.get("drive")
+            and not incident.get("manual_action")
+            and incident.get("incident_status", "Open") in {"New", "Open"}
+            and (
+                incident.get("incident_type") != "usb_device"
+                or incident.get("policy_decision") != "Block"
+            )
+        ):
+            # USB transfers created before the SOC-review workflow stored the
+            # recommendation as the action. Present unresolved legacy records
+            # through the same Alert -> Allow/Block workflow as new records.
+            public["policy_decision"] = "Alert"
+            public["action_taken"] = "Awaiting SOC decision"
+            public["enforcement_state"] = "pending_soc"
         notes = incident.get("investigation_notes", [])
         if isinstance(notes, list):
             public_notes: list[object] = []

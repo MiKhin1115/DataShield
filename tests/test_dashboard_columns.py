@@ -31,6 +31,9 @@ class DashboardColumnTests(TestCase):
         self.assertIn("incident.remote_ip", script)
         self.assertIn("incident.email_recipient", script)
         self.assertIn("new URL(targetValue)", script)
+        self.assertIn("function incidentSourceDevice", script)
+        self.assertIn("incident.source_ip", script)
+        self.assertIn("incidentSourceDevice(incident)", script)
 
         styles = Path("dlp_agent/dashboard_assets/styles.css").read_text(encoding="utf-8")
         self.assertIn('td:nth-child(5)::before { content: "Channel"; }', styles)
@@ -60,3 +63,16 @@ class DashboardColumnTests(TestCase):
         self.assertIn("showActionOptions(btn, incidentId)", handler)
         self.assertIn('normalized === "allow" || normalized === "block"', handler)
         self.assertIn("enforceAction(incidentId, normalized)", handler)
+
+        extension = Path("dlp_agent/browser_extension/content.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("socAllowedFiles.set", extension)
+        self.assertIn("soc_override: true", extension)
+
+    def test_timeline_supports_browser_and_powershell_event_fields(self) -> None:
+        script = Path("dlp_agent/dashboard_assets/app.js").read_text(encoding="utf-8")
+
+        self.assertIn("event.event_time || event.time", script)
+        self.assertIn("event.title || event.description", script)
+        self.assertIn("timelineTime(timelineEventTime(event))", script)

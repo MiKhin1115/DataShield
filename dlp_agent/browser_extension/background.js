@@ -24,7 +24,8 @@ async function executeBrowserCommand(command) {
             try {
                 await chrome.tabs.sendMessage(tabId, {
                     type: "SOC_DECISION",
-                    action: "allow"
+                    action: "allow",
+                    file_name: command.file_name || ""
                 });
             } catch (error) {}
         }

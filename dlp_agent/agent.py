@@ -38,6 +38,7 @@ class Incident:
     user_name: str
     department: str
     computer_name: str
+    source_ip: str
     ip_addresses: list[str]
     device_id: str
     device_name: str
@@ -63,6 +64,7 @@ class Incident:
     risk_score: int
     policy_decision: str
     action_taken: str
+    enforcement_state: str
     policy_reasons: list[str]
     matched_policy_ids: list[str]
     matched_policy_names: list[str]
@@ -209,7 +211,7 @@ class UsbDlpAgent:
                 matched_policy_names=[*assessment.matched_policy_names, "USB device authorization"],
                 notify_soc=True,
             )
-        elif usb_status == "unknown" and assessment.policy_decision == "Allow":
+        elif usb_status == "unknown":
             assessment = replace(
                 assessment,
                 risk_score=max(50, assessment.risk_score),
@@ -222,8 +224,20 @@ class UsbDlpAgent:
                 matched_policy_names=[*assessment.matched_policy_names, "Unknown USB device review"],
                 notify_soc=True,
             )
+
+        recommended_decision = assessment.policy_decision
+        assessment = replace(
+            assessment,
+            policy_decision="Alert",
+            policy_reasons=[
+                *assessment.policy_reasons,
+                f"USB transfer requires a SOC Allow or Block decision (recommended: {recommended_decision})",
+            ],
+            notify_soc=True,
+        )
         sha256 = hash_result.hashes.get("sha256", "")
         computer_name, ip_addresses = system_context()
+        source_ip = next((address for address in ip_addresses if "." in address), "")
         timeline.extend(
             [
                 self._timeline_event(
@@ -248,6 +262,7 @@ class UsbDlpAgent:
             user_name=user_name,
             department=department,
             computer_name=computer_name,
+            source_ip=source_ip,
             ip_addresses=ip_addresses,
             device_id=device_id,
             device_name=device.name if device else "Unknown USB storage",
@@ -272,7 +287,8 @@ class UsbDlpAgent:
             recommended_classification=assessment.file_classification,
             risk_score=assessment.risk_score,
             policy_decision=assessment.policy_decision,
-            action_taken=assessment.policy_decision,
+            action_taken="Awaiting SOC decision",
+            enforcement_state="pending_soc",
             policy_reasons=assessment.policy_reasons,
             matched_policy_ids=assessment.matched_policy_ids,
             matched_policy_names=assessment.matched_policy_names,
@@ -297,6 +313,7 @@ class UsbDlpAgent:
             else os.environ.get("USB_DLP_DEPARTMENT", "Unknown")
         )
         computer_name, ip_addresses = system_context()
+        source_ip = next((address for address in ip_addresses if "." in address), "")
         timeline = [
             self._timeline_event("usb_inserted", "USB device inserted", device.name, event_time),
             self._timeline_event(
@@ -329,20 +346,22 @@ class UsbDlpAgent:
             risk_score = 100 if usb_status == "blocked" else 90
             classification = "Restricted"
             decision = "Block"
+            enforcement_state = "blocked" if enforcement.enforced else "block_failed"
             policy_id = "USB-DEVICE-BLOCK"
             reason = f"USB device is explicitly {usb_status}"
         else:
-            action_taken = "Informational - USB device inserted (Monitored)"
+            action_taken = "Awaiting SOC decision"
             risk_score = 10
             classification = "Informational"
-            decision = "Allow"
+            decision = "Alert"
+            enforcement_state = "pending_soc"
             policy_id = "USB-INFO-001"
-            reason = "USB device insertion detected - Informational event (not a serious threat)"
+            reason = "USB device insertion detected and requires a SOC Allow or Block decision"
             timeline.append(
                 self._timeline_event(
-                    "unknown_device_alert",
-                    "Unknown USB device requires review",
-                    "The drive remains monitored until an administrator authorizes or denies it",
+                    "soc_review_pending",
+                    "USB device awaiting SOC decision",
+                    "The drive remains monitored until an analyst selects Allow or Block",
                 )
             )
 
@@ -353,6 +372,7 @@ class UsbDlpAgent:
             "user_name": user_name,
             "department": department,
             "computer_name": computer_name,
+            "source_ip": source_ip,
             "ip_addresses": ip_addresses,
             "device_id": device_id,
             "device_name": device.name,
@@ -379,6 +399,7 @@ class UsbDlpAgent:
             "risk_score": risk_score,
             "policy_decision": decision,
             "action_taken": action_taken,
+            "enforcement_state": enforcement_state,
             "policy_reasons": [reason],
             "matched_policy_ids": [policy_id],
             "matched_policy_names": ["USB device authorization"],

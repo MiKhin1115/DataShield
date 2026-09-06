@@ -28,6 +28,21 @@ def utc_now() -> datetime:
 
 def system_context() -> tuple[str, list[str]]:
     computer_name = socket.gethostname()
+    preferred_ipv4 = ""
+    route_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # A UDP connect asks Windows which interface it would route through; it
+        # does not send application data. This avoids choosing Hyper-V/WSL
+        # adapter addresses ahead of the active Wi-Fi or Ethernet address.
+        route_socket.connect(("8.8.8.8", 443))
+        candidate = str(route_socket.getsockname()[0])
+        if candidate and candidate != "0.0.0.0" and not candidate.startswith("127."):
+            preferred_ipv4 = candidate
+    except OSError:
+        pass
+    finally:
+        route_socket.close()
+
     addresses: set[str] = set()
     try:
         for result in socket.getaddrinfo(computer_name, None):
@@ -36,7 +51,10 @@ def system_context() -> tuple[str, list[str]]:
                 addresses.add(address)
     except OSError:
         pass
-    return computer_name, sorted(addresses)
+    ordered_addresses = sorted(addresses)
+    if preferred_ipv4:
+        ordered_addresses = [preferred_ipv4, *[item for item in ordered_addresses if item != preferred_ipv4]]
+    return computer_name, ordered_addresses
 
 
 class EvidenceVault:

@@ -50,7 +50,27 @@ class IncidentStore:
             if len(filtered) < len(incidents):
                 self._write_all_unlocked(filtered)
                 return True
-            return False
+        return False
+
+    def delete_history(self, incident_ids: Iterable[str] | None = None) -> list[str]:
+        """Delete selected history records, or every history record when IDs are omitted."""
+        targets = set(incident_ids) if incident_ids is not None else None
+        history_statuses = {"Resolved", "Closed", "False Positive"}
+        with self._lock:
+            incidents = self.read_all_unlocked()
+            retained: list[dict[str, object]] = []
+            deleted: list[str] = []
+            for incident in incidents:
+                incident_id = str(incident.get("incident_id", ""))
+                status = str(incident.get("incident_status", "Open"))
+                selected = targets is None or incident_id in targets
+                if selected and status in history_statuses:
+                    deleted.append(incident_id)
+                else:
+                    retained.append(incident)
+            if deleted:
+                self._write_all_unlocked(retained)
+            return deleted
 
     def count_by_sha256(self, sha256: str) -> int:
         if not sha256:

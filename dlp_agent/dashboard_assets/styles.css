@@ -179,6 +179,8 @@ main { width: min(1580px, 100%); margin: 0 auto; padding: 40px clamp(20px, 3vw, 
 .button-primary:hover { background: var(--blue-dark); border-color: var(--blue-dark); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35); }
 .button-secondary { border-color: var(--line-strong); background: var(--surface-solid); color: var(--ink); }
 .button-secondary:hover { background: var(--surface-soft); border-color: rgba(15, 23, 42, 0.25); }
+.button-danger { border-color: rgba(220, 38, 38, 0.35); background: var(--surface-solid); color: var(--red); }
+.button-danger:hover { border-color: var(--red); background: var(--red-soft); }
 
 input, select, textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface-solid); color: var(--ink); transition: all 0.2s ease; }
 input, select { padding: 10px 14px; }
@@ -189,6 +191,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--blue); outline: 
 .page-title { min-height: 58px; margin-bottom: 32px; display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
 .page-title h2 { font-size: 28px; line-height: 1.2; color: var(--ink); }
 .page-title p { margin-top: 8px; color: var(--muted); font-size: 15px; max-width: 600px; }
+.history-clear-toolbar, .history-clear-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .page-actions { display: flex; align-items: center; gap: 16px; }
 .auto-refresh { min-height: 42px; padding: 0 12px; display: flex; align-items: center; gap: 10px; color: var(--ink-soft); font-size: 14px; font-weight: 500; cursor: pointer; }
 .auto-refresh input, .state-toggle input, .check-field input { width: 18px; height: 18px; min-height: auto; accent-color: var(--blue); cursor: pointer; }
@@ -271,6 +274,9 @@ tbody tr { transition: background .2s ease; }
 tbody tr:hover { background: rgba(37, 99, 235, 0.03); }
 #incident-rows tr { cursor: pointer; }
 #incident-rows tr:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
+#history-rows tr { cursor: pointer; }
+.history-time-cell { display: flex; align-items: center; gap: 12px; }
+.history-select-checkbox { width: 18px; height: 18px; min-height: 18px; flex: 0 0 18px; accent-color: var(--blue); cursor: pointer; }
 
 .primary-cell, .secondary-cell { display: block; }
 .primary-cell { max-width: 290px; overflow: hidden; color: var(--ink); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }

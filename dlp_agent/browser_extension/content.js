@@ -1,7 +1,9 @@
 (function() {
     const recentlyReported = new Map();
+    const socAllowedFiles = new Map();
 
     function reportToDashboard(url, fileName, sampleText = "", scanResult = null, action = "Blocked by Enterprise Browser Extension") {
+        if (scanResult && scanResult.soc_override) return;
         const now = Date.now();
         if (recentlyReported.has(fileName) && (now - recentlyReported.get(fileName)) < 3000) {
             console.log("DLP Extension: Skipping duplicate report for", fileName);
@@ -192,6 +194,9 @@
             if (message.action === "allow") {
                 window.lastBlockedFile = null;
                 window.lastBlockedTime = 0;
+                if (message.file_name) {
+                    socAllowedFiles.set(message.file_name, Date.now() + 120000);
+                }
             }
             return;
         }
@@ -257,6 +262,18 @@
 
     async function scanFileBackend(file) {
         if (!file) return { blocked: true, error: "No file was available for inspection." };
+        const approvalExpires = socAllowedFiles.get(file.name || "");
+        if (approvalExpires && approvalExpires > Date.now()) {
+            return {
+                blocked: false,
+                findings: [],
+                classification: "Public",
+                risk_score: 0,
+                error: null,
+                soc_override: true
+            };
+        }
+        if (approvalExpires) socAllowedFiles.delete(file.name || "");
         // An empty file has no content to exfiltrate. Avoid turning a stale or
         // unavailable extension relay into a false sensitive-data detection.
         if (file.size === 0) {
@@ -311,9 +328,6 @@
             // decompressed, not interpreted as raw text in the page.
             scanFileBackend(file).then(scanResult => {
                 if (scanResult && scanResult.blocked) {
-                    try {
-                        e.target.value = "";
-                    } catch(err) {}
                     window.lastBlockedFile = file.name;
                     window.lastBlockedTime = Date.now();
                     blockAndAlert(uploadTarget, file.name, "", scanResult);
