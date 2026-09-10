@@ -144,7 +144,7 @@ class UsbDlpAgent:
     def scan_file_event(self, event: FileCopyEvent) -> Incident:
         device = self._device_for_drive(event.root)
         device_id = self._authorization_id(device) if device else str(event.root)
-        usb_status = self._authorization_status(device) if device else self.usb_registry.status(device_id)
+        usb_status = self._authorization_status(device) if device else "unknown"
         timeline: list[dict[str, str]] = []
         inserted_at = self.device_inserted_at.get(device.device_id if device else device_id)
         if inserted_at:
@@ -633,12 +633,7 @@ class UsbDlpAgent:
         return device.serial_number or device.pnp_device_id or device.device_id
 
     def _authorization_status(self, device: UsbDevice) -> str:
-        return self.usb_registry.status(
-            self._authorization_id(device),
-            device.serial_number,
-            device.pnp_device_id,
-            device.device_id,
-        )
+        return self.usb_registry.status(device.serial_number)
 
     def run_forever(self) -> None:
         print("USB DLP agent started. Press Ctrl+C to stop.", file=sys.stderr)
@@ -771,7 +766,7 @@ def seed_synthetic_incidents(paths: list[Path], store: IncidentStore) -> int:
         drive=str(root),
         name="Synthetic Test USB",
         volume_name="DLP_TEST_DATA",
-        filesystem="TEST",
+        filesystem="TEST", serial_number="SYNTHETIC-USB-001",
         size=None,
     )
     agent.devices[device.device_id] = device

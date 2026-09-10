@@ -188,3 +188,32 @@ class UsbDevicePolicyTests(TestCase):
                 self.assertEqual(incident.enforcement_state, "pending_soc")
                 self.assertEqual(incident.source_ip, "192.168.100.146")
                 self.assertGreaterEqual(incident.risk_score, minimum_risk)
+
+    def test_authorization_uses_only_hardware_serial(self) -> None:
+        from dataclasses import replace
+        with tempfile.TemporaryDirectory() as directory:
+            registry = UsbRegistry(Path(directory) / "usb.json")
+            registry.upsert("SERIAL-1", "Original name", "authorized")
+            agent = self._agent(
+                directory, registry,
+                FakeEnforcer(UsbEnforcementResult(True, "Blocked", "done")),
+                FakeAlerter(),
+            )
+            device = UsbDevice("E:", directory, "Original name", "TEST", "FAT32", 100,
+                               serial_number="SERIAL-1", pnp_device_id="PNP-1")
+            self.assertEqual(agent._authorization_status(device), "authorized")
+            self.assertEqual(agent._authorization_status(
+                replace(device, name="Renamed", device_id="F:", serial_number=" serial-1 ")
+            ), "authorized")
+            self.assertEqual(agent._authorization_status(
+                replace(device, serial_number="SERIAL-2")
+            ), "unknown")
+            self.assertEqual(agent._authorization_status(
+                replace(device, serial_number="")
+            ), "unknown")
+            registry._write([
+                {"device_id": "E:", "status": "blocked"},
+                {"device_id": "PNP-1", "status": "authorized"},
+            ])
+            self.assertEqual(agent._authorization_status(device), "unknown")
+            self.assertEqual(agent._authorization_status(replace(device, serial_number="")), "unknown")

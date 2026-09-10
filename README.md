@@ -98,8 +98,7 @@ file, so the page refreshes as new USB activity is recorded.
 
 ### USB authorization behavior
 
-USB authorization is matched by hardware serial number when Windows reports one,
-with the PnP identifier and drive letter retained as compatibility fallbacks.
+USB authorization is matched only by hardware serial number (ignoring case and surrounding spaces). Display names are labels only. Devices without a reported serial remain Unknown. Existing registrations using names, drive letters, or PnP identifiers must be registered again using the hardware serial shown in the incident.
 
 - **Authorized** devices remain available and are monitored for file-copy events.
 - **Unknown** devices are not in the authorization list. They remain monitored and

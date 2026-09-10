@@ -15,20 +15,20 @@ class UsbRegistry:
         with self._lock:
             return self._read()
 
-    def status(self, device_id: str, *aliases: str) -> str:
-        identities = {
-            value.strip().casefold()
-            for value in (device_id, *aliases)
-            if value and value.strip()
-        }
+    def status(self, serial_number: str) -> str:
+        serial = serial_number.strip().casefold()
+        if not serial:
+            return "unknown"
         for device in self.list():
-            if str(device.get("device_id", "")).strip().casefold() in identities:
+            if str(device.get("device_id", "")).strip().casefold() == serial:
                 return str(device.get("status", "unknown"))
         return "unknown"
-
     def upsert(self, device_id: str, name: str, status: str) -> dict[str, object]:
         if status not in {"authorized", "unauthorized", "blocked"}:
             raise ValueError("Invalid USB authorization status")
+        device_id = device_id.strip()
+        if ":" in device_id or "\\" in device_id or "/" in device_id:
+            raise ValueError("Enter the hardware USB serial number, not a drive letter or device path")
         record = {
             "device_id": device_id.strip(),
             "name": name.strip() or device_id.strip(),
@@ -36,11 +36,11 @@ class UsbRegistry:
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         if not record["device_id"]:
-            raise ValueError("Device ID is required")
+            raise ValueError("USB serial number is required")
         with self._lock:
             devices = self._read()
             for index, existing in enumerate(devices):
-                if str(existing.get("device_id", "")).casefold() == device_id.casefold():
+                if str(existing.get("device_id", "")).strip().casefold() == device_id.casefold():
                     devices[index] = record
                     self._write(devices)
                     return record
@@ -54,7 +54,7 @@ class UsbRegistry:
             remaining = [
                 item
                 for item in devices
-                if str(item.get("device_id", "")).casefold() != device_id.casefold()
+                if str(item.get("device_id", "")).casefold() != device_id.strip().casefold()
             ]
             if len(remaining) == len(devices):
                 return False
